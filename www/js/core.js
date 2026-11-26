@@ -57,7 +57,7 @@
   }
 
   function emptyState() {
-    return { nodes: [], groups: [], subscriptions: [] };
+    return { nodes: [], groups: [], subscriptions: [], rules: defaultRules() };
   }
 
   // ---------------------------------------------------------------------------
@@ -423,6 +423,52 @@
     { name: '🇬🇧英国节点', filter: '英国|GB|Great Britain' },
     { name: '🧿其它地区', filter: '(?i)^(?!.*(?:港|hk|hongkong|台|tw|taiwan|日|jp|japan|新加坡|sg|singapore|美|us|unitedstates|英国|gb|great britain|德国|de|germany|kr|korea|首尔|韩|韓)).*' }
   ];
+  // ------------------------------------------------------------ 分流规则（可自定义）
+  var RULE_PROVIDERS = ['private_domain', 'apple_domain', 'ai_domain', 'bilibili_domain', 'spotify_domain',
+    'youtube_domain', 'google_domain', 'onedrive_domain', 'microsoft_domain', 'tiktok_domain',
+    'telegram_domain', 'netflix_domain', 'notion_domain', 'paypal_domain', 'geolocation-!cn', 'cn_domain',
+    'google_ip', 'netflix_ip', 'telegram_ip', 'cn_ip'];
+  var SERVICE_GROUPS = ['📹 YouTube', '🍀 Google', '🤖 AI', '📲 Telegram', '🎥 NETFLIX', '🎵 Spotify',
+    '🎵 TikTok', '🪟 Microsoft', '🐬 OneDrive', '📖 Notion', '💶 PayPal', '📹 哔哩哔哩', '🍎 Apple',
+    '🎯 全球直连', '🐟 漏网之鱼'];
+  function defaultRules() {
+    return [
+      { type: 'RULE-SET', payload: 'apple_domain', target: '🍎 Apple' },
+      { type: 'RULE-SET', payload: 'ai_domain', target: '🤖 AI' },
+      { type: 'RULE-SET', payload: 'bilibili_domain', target: '📹 哔哩哔哩' },
+      { type: 'RULE-SET', payload: 'spotify_domain', target: '🎵 Spotify' },
+      { type: 'RULE-SET', payload: 'youtube_domain', target: '📹 YouTube' },
+      { type: 'RULE-SET', payload: 'google_domain', target: '🍀 Google' },
+      { type: 'RULE-SET', payload: 'onedrive_domain', target: '🐬 OneDrive' },
+      { type: 'RULE-SET', payload: 'microsoft_domain', target: '🪟 Microsoft' },
+      { type: 'RULE-SET', payload: 'tiktok_domain', target: '🎵 TikTok' },
+      { type: 'RULE-SET', payload: 'telegram_domain', target: '📲 Telegram' },
+      { type: 'RULE-SET', payload: 'netflix_domain', target: '🎥 NETFLIX' },
+      { type: 'RULE-SET', payload: 'notion_domain', target: '📖 Notion' },
+      { type: 'RULE-SET', payload: 'paypal_domain', target: '💶 PayPal' },
+      { type: 'RULE-SET', payload: 'geolocation-!cn', target: '🚀 节点选择' },
+      { type: 'RULE-SET', payload: 'cn_domain', target: '🎯 全球直连' },
+      { type: 'RULE-SET', payload: 'google_ip', target: '🍀 Google', noResolve: true },
+      { type: 'RULE-SET', payload: 'netflix_ip', target: '🎥 NETFLIX', noResolve: true },
+      { type: 'RULE-SET', payload: 'telegram_ip', target: '📲 Telegram', noResolve: true },
+      { type: 'RULE-SET', payload: 'cn_ip', target: '🎯 全球直连' },
+      { type: 'MATCH', payload: '', target: '🐟 漏网之鱼' }
+    ];
+  }
+  // 规则可选目标：内置策略组 + 服务组 + 自定义分组 + DIRECT/REJECT
+  function ruleTargets(state) {
+    var out = ['🚀 节点选择'];
+    POLICY_GROUPS.forEach(function (p) { if (out.indexOf(p.name) === -1) out.push(p.name); });
+    SERVICE_GROUPS.forEach(function (n) { if (out.indexOf(n) === -1) out.push(n); });
+    listGroups(state).forEach(function (g) {
+      if (g.custom && out.indexOf(g.name) === -1) out.push(g.name);
+    });
+    out.push('DIRECT'); out.push('REJECT');
+    return out;
+  }
+  function escapeRegExp(s) {
+    return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  }
   function isPolicyGroup(name) {
     return name === ALL_GROUP || POLICY_GROUPS.some(function (p) { return p.name === name; });
   }
@@ -550,7 +596,9 @@
     out.push('');
 
     // 锚点
-    var prList = '[🚀 节点选择, ♻️ 自动选择, 🌐 全部节点, 🇭🇰香港节点, 🇨🇳台湾节点, 🇯🇵日本节点, 🇸🇬新加坡节点, 🇰🇷韩国节点, 🇺🇲美国节点, 🇩🇪德国节点, 🇬🇧英国节点, 🧿其它地区, DIRECT]';
+    var customGroups = listGroups(state).filter(function (g) { return g.custom; }).map(function (g) { return g.name; });
+    var prNames = ['🚀 节点选择', '♻️ 自动选择', '🌐 全部节点'].concat(customGroups, ['🇭🇰香港节点', '🇨🇳台湾节点', '🇯🇵日本节点', '🇸🇬新加坡节点', '🇰🇷韩国节点', '🇺🇲美国节点', '🇩🇪德国节点', '🇬🇧英国节点', '🧿其它地区', 'DIRECT']);
+    var prList = '[' + prNames.join(', ') + ']';
     out.push('pr: &pr {type: select, proxies: ' + prList + '}');
     if (subs.length) {
       var useList = subs.map(function (s) { return s.name; }).join(', ');
@@ -668,11 +716,15 @@
 
     // proxy-groups
     out.push('proxy-groups:');
-    out.push('  - {name: 🚀 节点选择, type: select, proxies: [♻️ 自动选择, 🌐 全部节点, 🇭🇰香港节点, 🇨🇳台湾节点, 🇯🇵日本节点, 🇸🇬新加坡节点, 🇰🇷韩国节点, 🇺🇲美国节点, 🇩🇪德国节点, 🇬🇧英国节点, 🧿其它地区, DIRECT]}');
+    var selNames = ['♻️ 自动选择', '🌐 全部节点'].concat(customGroups, ['🇭🇰香港节点', '🇨🇳台湾节点', '🇯🇵日本节点', '🇸🇬新加坡节点', '🇰🇷韩国节点', '🇺🇲美国节点', '🇩🇪德国节点', '🇬🇧英国节点', '🧿其它地区', 'DIRECT']);
+    out.push('  - {name: 🚀 节点选择, type: select, proxies: [' + selNames.join(', ') + ']}');
     out.push('  - {name: ♻️ 自动选择, type: url-test, include-all: true, tolerance: 20, interval: 300, lazy: true, filter: "^((?!(DIRECT)).)*$"}');
     out.push('  - {name: ☢ 负载均衡-散列, type: load-balance, strategy: consistent-hashing, <<: *best, filter: "^((?!(DIRECT)).)*$"}');
     out.push('  - {name: ☢ 负载均衡-轮询, type: load-balance, strategy: round-robin, <<: *best, filter: "^((?!(DIRECT)).)*$"}');
     out.push('  - {name: 🌐 全部节点, type: select, include-all: true}');
+    customGroups.forEach(function (g) {
+      out.push('  - {name: ' + g + ', type: select, include-all: true, filter: "^' + escapeRegExp(g) + '\\\\|"}');
+    });
     ['📹 YouTube', '🍀 Google', '🤖 AI', '📲 Telegram', '🎥 NETFLIX', '🎵 Spotify', '🎵 TikTok', '🪟 Microsoft', '🐬 OneDrive', '📖 Notion', '💶 PayPal', '📹 哔哩哔哩'].forEach(function (name) {
       out.push('  - {name: ' + name + ', <<: *pr}');
     });
@@ -695,22 +747,15 @@
     out.push('  - {name: 🧿其它地区, type: select, include-all: true, filter: "(?i)^(?!.*(?:港|hk|hongkong|台|tw|taiwan|日|jp|japan|新加坡|sg|singapore|美|us|unitedstates|英国|gb|great britain|德国|de|germany|kr|korea|首尔|韩|韓)).*"}');
     out.push('');
 
-    // rules
+    // rules（用户自定义顺序与目标；为空时兜底 MATCH）
     out.push('rules:');
-    [
-      ['apple_domain', '🍎 Apple'], ['ai_domain', '🤖 AI'], ['bilibili_domain', '📹 哔哩哔哩'],
-      ['spotify_domain', '🎵 Spotify'], ['youtube_domain', '📹 YouTube'], ['google_domain', '🍀 Google'],
-      ['onedrive_domain', '🐬 OneDrive'], ['microsoft_domain', '🪟 Microsoft'], ['tiktok_domain', '🎵 TikTok'],
-      ['telegram_domain', '📲 Telegram'], ['netflix_domain', '🎥 NETFLIX'], ['notion_domain', '📖 Notion'],
-      ['paypal_domain', '💶 PayPal']
-    ].forEach(function (r) { out.push('  - RULE-SET,' + r[0] + ',' + r[1]); });
-    out.push('  - RULE-SET,geolocation-!cn,🚀 节点选择');
-    out.push('  - RULE-SET,cn_domain,🎯 全球直连');
-    out.push('  - RULE-SET,google_ip,🍀 Google,no-resolve');
-    out.push('  - RULE-SET,netflix_ip,🎥 NETFLIX,no-resolve');
-    out.push('  - RULE-SET,telegram_ip,📲 Telegram,no-resolve');
-    out.push('  - RULE-SET,cn_ip,🎯 全球直连');
-    out.push('  - MATCH,🐟 漏网之鱼');
+    var ruleList = (state.rules && state.rules.length) ? state.rules : [{ type: 'MATCH', payload: '', target: '🐟 漏网之鱼' }];
+    ruleList.forEach(function (r) {
+      if (r.type === 'MATCH') { out.push('  - MATCH,' + r.target); return; }
+      var line = '  - ' + r.type + ',' + r.payload + ',' + r.target;
+      if (r.noResolve) line += ',no-resolve';
+      out.push(line);
+    });
     out.push('');
 
     // rule-providers（MetaCubeX 公开规则库）
@@ -982,7 +1027,10 @@
     ALL_GROUP: ALL_GROUP,
     POLICY_GROUPS: POLICY_GROUPS,
     isPolicyGroup: isPolicyGroup,
-    policyGroupMembers: policyGroupMembers
+    policyGroupMembers: policyGroupMembers,
+    defaultRules: defaultRules,
+    ruleTargets: ruleTargets,
+    RULE_PROVIDERS: RULE_PROVIDERS
   };
 
   global.NodeYmlCore = Core;
