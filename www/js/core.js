@@ -532,6 +532,35 @@
     return { ok: true };
   }
 
+  // 把源分组的全部节点移动到目标分组（目标可以是「全部节点」或任一自定义分组）。
+  // 移动后节点名第一段随之变化；与目标分组已有节点重名时，先补第 5 段协议名
+  // 区分，仍重名的跳过并留在原分组。
+  function moveGroupNodes(state, fromName, toName) {
+    if (isPolicyGroup(fromName) || (toName !== ALL_GROUP && isPolicyGroup(toName))) return { ok: false, error: ct('策略组不能移动节点') };
+    if (fromName === toName) return { ok: false, error: ct('目标分组与源分组相同') };
+    var known = listGroups(state).map(function (g) { return g.name; });
+    if (known.indexOf(fromName) === -1) return { ok: false, error: ct('分组「{0}」不存在', fromName) };
+    if (known.indexOf(toName) === -1) return { ok: false, error: ct('分组「{0}」不存在', toName) };
+    var taken = {};
+    state.nodes.forEach(function (n) { if (n.groupName !== fromName) taken[buildNodeName(n)] = true; });
+    var moved = 0, skipped = 0;
+    state.nodes.forEach(function (n) {
+      if (n.groupName !== fromName) return;
+      var origSuffix = n.suffix;
+      n.groupName = toName;
+      if (taken[buildNodeName(n)]) {
+        if (!n.suffix) n.suffix = n.type;
+        if (taken[buildNodeName(n)]) {
+          n.groupName = fromName; n.suffix = origSuffix; skipped++; return;
+        }
+      }
+      taken[buildNodeName(n)] = true;
+      moved++;
+    });
+    if (moved > 0 && toName !== ALL_GROUP && state.groups.indexOf(toName) === -1) state.groups.push(toName);
+    return { ok: true, moved: moved, skipped: skipped };
+  }
+
   function addNode(state, node) {
     node.name = buildNodeName(node);
     if (state.nodes.some(function (n) { return buildNodeName(n) === node.name; })) {
@@ -1012,6 +1041,7 @@
     addGroup: addGroup,
     renameGroup: renameGroup,
     deleteGroup: deleteGroup,
+    moveGroupNodes: moveGroupNodes,
     addNode: addNode,
     autoSubName: autoSubName,
     maskUrl: maskUrl,
