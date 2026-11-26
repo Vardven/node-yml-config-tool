@@ -751,6 +751,7 @@
     out.push('rules:');
     var ruleList = (state.rules && state.rules.length) ? state.rules : [{ type: 'MATCH', payload: '', target: '🐟 漏网之鱼' }];
     ruleList.forEach(function (r) {
+      if (r.name) out.push('  # ' + String(r.name).replace(/[\r\n]+/g, ' '));
       if (r.type === 'MATCH') { out.push('  - MATCH,' + r.target); return; }
       var line = '  - ' + r.type + ',' + r.payload + ',' + r.target;
       if (r.noResolve) line += ',no-resolve';
