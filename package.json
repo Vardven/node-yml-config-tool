@@ -24,6 +24,20 @@
         "nsis",
         "portable"
       ]
+    },
+    "mac": {
+      "artifactName": "node-yml-config-tool-${version}-${arch}.${ext}",
+      "category": "public.app-category.utilities",
+      "identity": null,
+      "target": [
+        {
+          "arch": [
+            "x64",
+            "arm64"
+          ],
+          "target": "dmg"
+        }
+      ]
     }
   },
   "dependencies": {
@@ -50,5 +64,5 @@
     "serve": "npx --yes serve www -p 8080",
     "start": "electron ."
   },
-  "version": "1.0.13"
+  "version": "1.0.14"
 }
