@@ -623,7 +623,7 @@
   }
 
   // ---------------------------------------------------------------- 更新检测
-  var APP_VERSION = '1.0.8';
+  var APP_VERSION = '1.0.9';
   var LATEST_API = 'https://api.github.com/repos/Vardven/node-yml-config-tool/releases/latest';
   var updateReleaseUrl = 'https://github.com/Vardven/node-yml-config-tool/releases/latest';
 
@@ -660,22 +660,38 @@
       });
   }
 
+  function b64utf8(s) { return btoa(unescape(encodeURIComponent(s))); }
   function download(filename, text, type) {
     // 安卓 App（Capacitor 的 WebView）不处理 blob 链接下载，点了没反应；
-    // 原生环境改走 Filesystem 写缓存文件 + 系统分享面板保存/发送。
+    // 原生环境优先走系统「另存为」对话框（SaveAs 插件 / SAF）：用户在文件管理器里自己选保存位置；
+    // 没有该插件时退回 Filesystem 写缓存 + 系统分享面板。
     var cap = window.Capacitor;
-    if (cap && typeof cap.isNativePlatform === 'function' && cap.isNativePlatform() &&
-        cap.Plugins && cap.Plugins.Filesystem && cap.Plugins.Share) {
-      var fs = cap.Plugins.Filesystem;
-      var share = cap.Plugins.Share;
-      fs.writeFile({ path: filename, data: text, directory: 'CACHE', encoding: 'utf8' })
-        .then(function () { return fs.getUri({ path: filename, directory: 'CACHE' }); })
-        .then(function (r) { return share.share({ title: filename, url: r.uri }); })
-        .catch(function () {
-          var em = $('export-msg');
-          if (em) msg(em, '保存失败，请改用「复制 YAML」', false);
-        });
-      return;
+    if (cap && typeof cap.isNativePlatform === 'function' && cap.isNativePlatform() && cap.Plugins) {
+      if (cap.Plugins.SaveAs) {
+        var mime = type || (filename.slice(-5) === '.json' ? 'application/json' : (filename.slice(-4) === '.txt' ? 'text/plain' : 'text/yaml'));
+        cap.Plugins.SaveAs.saveAs({ filename: filename, contentType: mime, data: b64utf8(text) })
+          .then(function () {
+            var em = $('export-msg');
+            if (em) msg(em, t('文件已保存'), true);
+          })
+          .catch(function () {
+            var em = $('export-msg');
+            if (em) msg(em, t('已取消保存'), false);
+          });
+        return;
+      }
+      if (cap.Plugins.Filesystem && cap.Plugins.Share) {
+        var fs = cap.Plugins.Filesystem;
+        var share = cap.Plugins.Share;
+        fs.writeFile({ path: filename, data: text, directory: 'CACHE', encoding: 'utf8' })
+          .then(function () { return fs.getUri({ path: filename, directory: 'CACHE' }); })
+          .then(function (r) { return share.share({ title: filename, url: r.uri }); })
+          .catch(function () {
+            var em = $('export-msg');
+            if (em) msg(em, '保存失败，请改用「复制 YAML」', false);
+          });
+        return;
+      }
     }
     var blob = new Blob([text], { type: type || 'text/plain' });
     var a = document.createElement('a');
