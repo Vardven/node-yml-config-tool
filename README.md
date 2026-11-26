@@ -2,11 +2,24 @@
 
 把 **v2rayN 的单个节点**和 **Clash 订阅**融合到一份配置里：在一个工具里统一管理单个节点与订阅，自由分组，一键导出完整的 Clash / mihomo YAML 拿去用；反过来，订阅里的节点也能拆成单个节点，一个一个复制成分享链接，粘回 v2rayN 单独使用。
 
-同一份代码有三种用法：
+同一份代码有四种用法：
 
 - **网页版**：部署到任意静态托管后用浏览器打开，手机、电脑都行，可「添加到主屏幕」当 App 用
-- **Windows**：Electron 打包的 `.exe`（安装版 + 免安装版）
-- **Android**：Capacitor 打包的 `.apk`（正式签名版，可覆盖升级）
+- **Windows**：Electron 打包的 `.exe`（x64 / ARM64，各有安装版 + 免安装版）
+- **Android**：Capacitor 打包的 `.apk`（正式签名版，可覆盖升级；通用版 + 按架构分包）
+- **macOS**：Electron 打包的 `.dmg`（Apple Silicon / Intel）
+
+## 下载
+
+到 [Releases 页](https://github.com/Vardven/node-yml-config-tool/releases/latest)下载最新版，按自己的系统和架构选：
+
+| OS | 可选文件 |
+| --- | --- |
+| Android | APK ARMv8 · APK ARMv7 · APK x64 · 通用版 APK |
+| Windows | Setup x64 · Portable x64 · Setup ARM64 · Portable ARM64 |
+| macOS | DMG Apple Silicon · DMG Intel X64 |
+
+各文件的区别和装法见下面「使用方法」里对应的系统小节。
 
 ## 界面截图
 
@@ -90,10 +103,10 @@ npm run serve
 
 ### Windows 版
 
-到仓库的 [Releases](https://github.com/Vardven/node-yml-config-tool/releases) 页下载最新版：
+到仓库的 [Releases](https://github.com/Vardven/node-yml-config-tool/releases) 页下载最新版，按电脑架构选（普通电脑都是 x64；ARM 架构的 Windows 设备选 ARM64）：
 
-- `node-yml-config-tool-<版本>-x64-setup.exe`：安装版，装完从开始菜单打开
-- `node-yml-config-tool-<版本>-x64-portable.exe`：免安装版，双击即用
+- `node-yml-config-tool-<版本>-x64-setup.exe` / `-arm64-setup.exe`：安装版，装完从开始菜单打开
+- `node-yml-config-tool-<版本>-x64-portable.exe` / `-arm64-portable.exe`：免安装版，双击即用
 
 exe 已做代码签名（自签名证书，发布者 Vardven）；因证书为自签名，首次运行如遇 SmartScreen 提示，点「更多信息 → 仍要运行」。
 
@@ -101,12 +114,28 @@ exe 已做代码签名（自签名证书，发布者 Vardven）；因证书为�
 
 同样在 [Releases](https://github.com/Vardven/node-yml-config-tool/releases) 页下载：
 
-- `app-release.apk`：**正式签名版，推荐装这个**，以后出新版可直接覆盖升级，不用卸载
+- `app-release.apk`：**通用版正式签名包，推荐装这个**，不挑架构，以后出新版可直接覆盖升级，不用卸载
+- `app-arm64-v8a-release.apk` / `app-armeabi-v7a-release.apk` / `app-x86_64-release.apk`：按架构分开的正式签名包，包体略小，功能完全一样。现在的手机基本都是 ARMv8（arm64-v8a）；老设备选 ARMv7；模拟器多为 x64。不确定就下通用版
 - `app-debug.apk`：调试版，也可安装
 
 安装时如系统提示，需要允许「安装未知应用」。下载的 YAML / 备份文件点保存时会弹出系统文件管理器，自己选位置存。v1.0.13 起系统设置里显示的版本号与实际版本一致（此前一直显示模板默认值 1.0，实际功能不受影响）。
 
-### 基本流程（三种版本都一样）
+### macOS 版
+
+同样在 [Releases](https://github.com/Vardven/node-yml-config-tool/releases) 页下载：
+
+- `node-yml-config-tool-<版本>-arm64.dmg`：Apple Silicon（M1 / M2 / M3 / M4 芯片）
+- `node-yml-config-tool-<版本>-x64.dmg`：Intel 芯片
+
+打开 dmg 把应用拖进「应用程序」即可。**注意：macOS 版没有苹果开发者签名**，首次打开如果提示「无法打开，因为无法验证开发者」或应用已损坏，在「访达 → 应用程序」里**右键点应用 → 打开**，在弹窗里再点「打开」；还不行的话在终端执行：
+
+```bash
+xattr -dr com.apple.quarantine "/Applications/Clash YML 配置工具.app"
+```
+
+之后就能正常打开。
+
+### 基本流程（各版本都一样）
 
 1. **加节点**：「添加节点」页粘贴分享链接（可一次多条），核对解析出的参数和地点，选好分组后添加；没有链接也可以手动填
 2. **加订阅**：「订阅」页添加订阅链接，导出配置时整份引用；想把订阅里的节点拆出来单独用，在同页粘贴订阅链接点「解析订阅」拉取后勾选导入，或把订阅的 Base64 内容粘进来解码导入
@@ -127,7 +156,7 @@ npm run serve   # 网页版本地调试 http://localhost:8080
 npm start       # 桌面版调试运行（Electron）
 ```
 
-打包不用在自己电脑上做：仓库带了两份 GitHub Actions 配置，推送 `v` 开头的标签（如 `v1.0.13`）会自动打包，并把 exe 和 apk 挂到对应的 Release 里；也可以在 Actions 页手动触发（产物在运行记录的 Artifacts 里）。打包时会自动把 `package.json` 里的版本号写入安卓 APK 的 versionName / versionCode（versionCode 按 主×10000＋次×100＋修 计算），三端版本号始终一致。
+打包不用在自己电脑上做：仓库带了三份 GitHub Actions 配置，推送 `v` 开头的标签（如 `v1.0.14`）会自动打包，并把 exe、apk 和 dmg 挂到对应的 Release 里；也可以在 Actions 页手动触发（产物在运行记录的 Artifacts 里）。打包时会自动把 `package.json` 里的版本号写入安卓 APK 的 versionName / versionCode（versionCode 按 主×10000＋次×100＋修 计算，分架构包再按架构加权），各端版本号始终一致。
 
 签名说明：
 
@@ -155,9 +184,12 @@ npm start       # 桌面版调试运行（Electron）
 ├── package.json                # 依赖、脚本、electron-builder 打包配置
 ├── wrangler.jsonc              # Cloudflare 一键部署配置（静态资源指向 www）
 ├── docs/screenshots/           # README 截图（演示数据）
+├── build/
+│   └── icon.png                # 桌面应用图标（1024×1024）
 ├── .github/workflows/
-│   ├── build-windows.yml       # 云端打 Windows exe
-│   └── build-android.yml       # 云端打安卓 apk（自动写入版本号）
+│   ├── build-windows.yml       # 云端打 Windows exe（x64 + ARM64）
+│   ├── build-android.yml       # 云端打安卓 apk（自动写入版本号、按架构分包）
+│   └── build-macos.yml         # 云端打 macOS dmg（x64 + Apple Silicon，未签名）
 ├── LICENSE                     # CC BY-NC-SA 4.0
 └── README.md
 ```
