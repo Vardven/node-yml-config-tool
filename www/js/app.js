@@ -341,6 +341,50 @@
       reader.readAsText(file);
       this.value = '';
     });
+
+    $('check-update-btn').addEventListener('click', function () { checkForUpdates(true); });
+    $('update-now-btn').addEventListener('click', function () {
+      $('update-modal').hidden = true;
+      window.open(updateReleaseUrl, '_blank');
+    });
+    $('update-later-btn').addEventListener('click', function () { $('update-modal').hidden = true; });
+  }
+
+  // ---------------------------------------------------------------- 更新检测
+  var APP_VERSION = '1.0.0';
+  var LATEST_API = 'https://api.github.com/repos/Vardven/node-yml-config-tool/releases/latest';
+  var updateReleaseUrl = 'https://github.com/Vardven/node-yml-config-tool/releases/latest';
+
+  function isNewerVersion(latest, current) {
+    var a = latest.split('.').map(function (x) { return parseInt(x, 10) || 0; });
+    var b = current.split('.').map(function (x) { return parseInt(x, 10) || 0; });
+    for (var i = 0; i < Math.max(a.length, b.length); i++) {
+      if ((a[i] || 0) > (b[i] || 0)) return true;
+      if ((a[i] || 0) < (b[i] || 0)) return false;
+    }
+    return false;
+  }
+
+  function checkForUpdates(manual) {
+    var out = $('update-check-msg');
+    if (manual && out) msg(out, '正在检查更新…', true);
+    fetch(LATEST_API, { headers: { 'Accept': 'application/vnd.github+json' } })
+      .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+      .then(function (d) {
+        var latest = String(d.tag_name || '').replace(/^v/i, '');
+        if (latest && isNewerVersion(latest, APP_VERSION)) {
+          updateReleaseUrl = d.html_url || updateReleaseUrl;
+          $('update-title').textContent = '发现新版本 v' + latest;
+          $('update-desc').textContent = '当前版本 v' + APP_VERSION + '，最新版本 v' + latest + '。点「立即更新」打开下载页，下载新版本安装即可。';
+          $('update-modal').hidden = false;
+          if (manual && out) msg(out, '发现新版本 v' + latest, true);
+        } else if (manual && out) {
+          msg(out, '已是最新版本（v' + APP_VERSION + '）', true);
+        }
+      })
+      .catch(function () {
+        if (manual && out) msg(out, '检查更新失败，请检查网络后重试', false);
+      });
   }
 
   function download(filename, text, type) {
@@ -354,4 +398,5 @@
 
   bind();
   renderAll();
+  checkForUpdates(false);
 })();
