@@ -1,6 +1,13 @@
 // Electron 主进程：打开 www/index.html，数据由页面自己的 localStorage 保存
-const { app, BrowserWindow, Menu, shell } = require('electron');
+const { app, BrowserWindow, Menu, shell, ipcMain, net } = require('electron');
 const path = require('path');
+
+// 页面「解析订阅」拉取订阅链接用：主进程发请求不受浏览器跨域限制，也能带 User-Agent
+ipcMain.handle('fetch-text', async (event, url, headers) => {
+  const res = await net.fetch(url, { headers: headers || {} });
+  if (!res.ok) throw new Error('HTTP ' + res.status);
+  return await res.text();
+});
 
 function createWindow() {
   const win = new BrowserWindow({
