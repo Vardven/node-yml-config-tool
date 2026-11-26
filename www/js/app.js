@@ -68,10 +68,14 @@
     $('group-empty').style.display = groups.length ? 'none' : 'block';
     $('group-list').innerHTML = groups.map(function (g) {
       return '<div class="card"><div class="card-head"><strong>' + esc(g.name) + '</strong><span>' + g.count + ' 个节点</span></div>' +
-        '<div class="row">' +
-        '<input type="text" placeholder="新分组名" id="rename-' + cssId(g.name) + '">' +
+        '<div class="row" data-view="btns">' +
         '<button data-gact="rename" data-name="' + esc(g.name) + '">重命名</button>' +
         '<button data-gact="del" data-name="' + esc(g.name) + '" class="danger">删除</button>' +
+        '</div>' +
+        '<div class="row" data-view="edit" style="display:none">' +
+        '<input type="text" data-field="rename" value="' + esc(g.name) + '">' +
+        '<button data-gact="save-rename" data-name="' + esc(g.name) + '">保存</button>' +
+        '<button data-gact="cancel" data-name="' + esc(g.name) + '">取消</button>' +
         '</div></div>';
     }).join('');
     renderGroupSelect();
@@ -120,6 +124,16 @@
         '<button data-sact="rename" data-id="' + s.id + '">改名</button>' +
         '<button data-sact="url" data-id="' + s.id + '">换链接</button>' +
         '<button data-sact="del" data-id="' + s.id + '" class="danger">删除</button>' +
+        '</div>' +
+        '<div class="row sub-edit" data-edit="rename" style="display:none">' +
+        '<input type="text" data-field="name" value="' + esc(s.name) + '">' +
+        '<button data-sact="save-name" data-id="' + s.id + '">保存</button>' +
+        '<button data-sact="cancel" data-id="' + s.id + '">取消</button>' +
+        '</div>' +
+        '<div class="row sub-edit" data-edit="url" style="display:none">' +
+        '<input type="text" data-field="url" value="' + esc(s.url) + '">' +
+        '<button data-sact="save-url" data-id="' + s.id + '">保存</button>' +
+        '<button data-sact="cancel" data-id="' + s.id + '">取消</button>' +
         '</div></div>';
     }).join('');
   }
@@ -294,8 +308,18 @@
       var btn = e.target.closest('button'); if (!btn) return;
       var name = btn.dataset.name;
       var out = $('group-msg');
+      var card = btn.closest('.card');
       if (btn.dataset.gact === 'rename') {
-        var input = $('rename-' + cssId(name));
+        // 点重命名后才出现编辑框，且预填当前分组名
+        card.querySelector('[data-view="btns"]').style.display = 'none';
+        var ed = card.querySelector('[data-view="edit"]');
+        ed.style.display = '';
+        var inp = ed.querySelector('input'); if (inp) { inp.focus(); inp.select(); }
+        return;
+      }
+      if (btn.dataset.gact === 'cancel') { renderGroups(); return; }
+      if (btn.dataset.gact === 'save-rename') {
+        var input = card.querySelector('[data-field="rename"]');
         var res = Core.renameGroup(state, name, input ? input.value : '');
         if (!res.ok) { msg(out, res.error, false); return; }
         msg(out, '已改名，同步更新了 ' + res.updatedNodes + ' 个节点', true);
@@ -329,22 +353,29 @@
       if (!sub) return;
       var out = $('sub-msg');
       if (btn.dataset.sact === 'toggle') { revealSubs[sub.id] = !revealSubs[sub.id]; renderSubs(); return; }
-      if (btn.dataset.sact === 'del') {
-        if (confirm('删除订阅「' + sub.name + '」？')) { state.subscriptions = state.subscriptions.filter(function (s) { return s.id !== sub.id; }); }
-      } else if (btn.dataset.sact === 'rename') {
-        var nn = prompt('新的订阅名：', sub.name);
-        if (nn && nn.trim()) {
-          if (state.subscriptions.some(function (s) { return s.id !== sub.id && s.name === nn.trim(); })) { msg(out, '订阅名已存在', false); return; }
-          sub.name = nn.trim();
-        }
-      } else if (btn.dataset.sact === 'url') {
-        var nu = prompt('新的订阅链接：', sub.url);
-        if (nu && nu.trim()) {
-          if (!/^https?:\/\/\S+$/i.test(nu.trim())) { msg(out, '不是有效的 http(s) 链接', false); return; }
-          if (state.subscriptions.some(function (s) { return s.id !== sub.id && s.url === nu.trim(); })) { msg(out, '该链接已经存在', false); return; }
-          sub.url = nu.trim();
-        }
+      var card = btn.closest('.card');
+      if (btn.dataset.sact === 'rename' || btn.dataset.sact === 'url') {
+        // 不用系统 prompt（在桌面端/部分浏览器里不弹出），改成卡片内编辑
+        card.querySelectorAll('.sub-edit').forEach(function (el) { el.style.display = 'none'; });
+        var ed = card.querySelector('[data-edit="' + btn.dataset.sact + '"]');
+        if (ed) { ed.style.display = ''; var inp = ed.querySelector('input'); if (inp) { inp.focus(); inp.select(); } }
+        return;
       }
+      if (btn.dataset.sact === 'cancel') { renderSubs(); return; }
+      if (btn.dataset.sact === 'save-name') {
+        var nn = card.querySelector('[data-field="name"]').value.trim();
+        if (!nn) { msg(out, '订阅名不能为空', false); return; }
+        if (state.subscriptions.some(function (s) { return s.id !== sub.id && s.name === nn; })) { msg(out, '订阅名已存在', false); return; }
+        sub.name = nn;
+      } else if (btn.dataset.sact === 'save-url') {
+        var nu = card.querySelector('[data-field="url"]').value.trim();
+        if (!/^https?:\/\/\S+$/i.test(nu)) { msg(out, '不是有效的 http(s) 链接', false); return; }
+        if (state.subscriptions.some(function (s) { return s.id !== sub.id && s.url === nu; })) { msg(out, '该链接已经存在', false); return; }
+        sub.url = nu;
+      } else if (btn.dataset.sact === 'del') {
+        if (confirm('删除订阅「' + sub.name + '」？')) { state.subscriptions = state.subscriptions.filter(function (s) { return s.id !== sub.id; }); }
+        else return;
+      } else return;
       save(); renderAll();
     });
 
