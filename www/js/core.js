@@ -705,6 +705,224 @@
     return out.join('\n');
   }
 
+  // ------------------------------------------------------------ 节点 → 分享链接
+  function b64encodeUtf8(str) {
+    if (typeof btoa !== 'undefined') return btoa(unescape(encodeURIComponent(str)));
+    return Buffer.from(str, 'utf8').toString('base64');
+  }
+  function b64urlEncodeUtf8(str) {
+    return b64encodeUtf8(str).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  }
+  function buildShareLink(node) {
+    var d = node.details || {};
+    var name = buildNodeName(node);
+    var q = [];
+    function add(k, v) { if (v !== undefined && v !== null && v !== '') q.push(k + '=' + encodeURIComponent(v)); }
+    var addr = node.server + ':' + node.port;
+    var frag = '#' + encodeURIComponent(name);
+    if (node.type === 'vless') {
+      if (d.flow) add('flow', d.flow);
+      if (d.encryption && d.encryption !== 'none') add('encryption', d.encryption);
+      if (d.realityPublicKey) { add('security', 'reality'); add('pbk', d.realityPublicKey); add('sid', d.realityShortId); }
+      else if (d.tls) add('security', 'tls');
+      add('sni', d.servername); add('fp', d.fingerprint);
+      if (d.alpn && d.alpn.length) add('alpn', d.alpn.join(','));
+      var net = d.network || 'tcp';
+      add('type', net);
+      if (net === 'ws') { add('host', d.transportHost); add('path', d.transportPath); }
+      if (net === 'grpc') add('serviceName', d.serviceName);
+      if (net === 'xhttp') { add('path', d.transportPath); add('host', d.transportHost); add('mode', d.xhttpMode); }
+      if (d.skipCertVerify) add('allowInsecure', '1');
+      return 'vless://' + encodeURIComponent(d.uuid || '') + '@' + addr + (q.length ? '?' + q.join('&') : '') + frag;
+    }
+    if (node.type === 'vmess') {
+      var o = { v: '2', ps: name, add: node.server, port: String(node.port), id: d.uuid || '', aid: String(d.alterId || 0), scy: d.method || 'auto', net: d.network || 'tcp', type: 'none', host: d.transportHost || '', path: d.transportPath || '', tls: d.tls ? 'tls' : '', sni: d.servername || '', alpn: (d.alpn || []).join(','), fp: d.fingerprint || '' };
+      return 'vmess://' + b64encodeUtf8(JSON.stringify(o));
+    }
+    if (node.type === 'trojan') {
+      add('sni', d.servername); add('fp', d.fingerprint);
+      if (d.alpn && d.alpn.length) add('alpn', d.alpn.join(','));
+      if (d.network && d.network !== 'tcp') { add('type', d.network); add('host', d.transportHost); add('path', d.transportPath); }
+      if (d.skipCertVerify) add('allowInsecure', '1');
+      return 'trojan://' + encodeURIComponent(d.password || '') + '@' + addr + (q.length ? '?' + q.join('&') : '') + frag;
+    }
+    if (node.type === 'ss') {
+      return 'ss://' + b64urlEncodeUtf8((d.method || '') + ':' + (d.password || '')) + '@' + addr + frag;
+    }
+    if (node.type === 'hysteria2') {
+      add('sni', d.servername);
+      if (d.skipCertVerify) add('insecure', '1');
+      add('obfs', d.obfs); add('obfs-password', d.obfsPassword);
+      if (d.alpn && d.alpn.length) add('alpn', d.alpn.join(','));
+      return 'hysteria2://' + encodeURIComponent(d.password || '') + '@' + addr + (q.length ? '?' + q.join('&') : '') + frag;
+    }
+    if (node.type === 'tuic') {
+      add('sni', d.servername);
+      if (d.alpn && d.alpn.length) add('alpn', d.alpn.join(','));
+      add('congestion_control', d.congestionControl); add('udp_relay_mode', d.udpRelayMode);
+      if (d.skipCertVerify) add('allow_insecure', '1');
+      return 'tuic://' + encodeURIComponent(d.uuid || '') + ':' + encodeURIComponent(d.password || '') + '@' + addr + (q.length ? '?' + q.join('&') : '') + frag;
+    }
+    if (node.type === 'anytls') {
+      if (d.skipCertVerify) add('insecure', '1');
+      add('sni', d.servername); add('fp', d.fingerprint);
+      if (d.alpn && d.alpn.length) add('alpn', d.alpn.join(','));
+      return 'anytls://' + encodeURIComponent(d.password || '') + '@' + addr + (q.length ? '?' + q.join('&') : '') + frag;
+    }
+    throw new Error(ct('不支持的协议：{0}', node.type));
+  }
+
+  // ------------------------------------------------------------ 订阅内容解码
+  function decodeSubContent(text) {
+    var t = String(text || '').trim();
+    if (!t) return { links: [] };
+    if (/(^|\n)\s*proxies\s*:/.test(t)) return { yaml: t, links: [] };
+    var compact = t.replace(/\s+/g, '');
+    var decoded = '';
+    if (/^[A-Za-z0-9+/=_-]+$/.test(compact) && compact.length % 4 !== 1) {
+      try {
+        var b64 = compact.replace(/-/g, '+').replace(/_/g, '/');
+        if (typeof atob !== 'undefined') decoded = decodeURIComponent(escape(atob(b64)));
+        else decoded = Buffer.from(b64, 'base64').toString('utf8');
+      } catch (e) { decoded = ''; }
+    }
+    var body = decoded && decoded.indexOf('://') !== -1 ? decoded : t;
+    var links = [];
+    body.split(/\r?\n/).forEach(function (line) {
+      var m = line.match(/(vmess|vless|trojan|ss|hysteria2|hy2|tuic|anytls):\/\/\S+/);
+      if (m) links.push(m[0]);
+    });
+    return { links: links };
+  }
+
+  // ------------------------------------------------------------ Clash YAML proxies 解析（容错子集）
+  function parseFlowValue(s) {
+    s = s.trim();
+    if (s.charAt(0) === '{' && s.charAt(s.length - 1) === '}') {
+      var obj = {}; var inner = s.slice(1, -1).trim();
+      splitTop(inner).forEach(function (pair) {
+        var i = pair.indexOf(':');
+        if (i > 0) obj[unquote(pair.slice(0, i).trim())] = parseFlowValue(pair.slice(i + 1));
+      });
+      return obj;
+    }
+    if (s.charAt(0) === '[' && s.charAt(s.length - 1) === ']') {
+      var inner2 = s.slice(1, -1).trim();
+      if (!inner2) return [];
+      return splitTop(inner2).map(parseFlowValue);
+    }
+    return scalarVal(s);
+  }
+  function splitTop(s) {
+    var parts = [], depth = 0, cur = '', inQ = null;
+    for (var i = 0; i < s.length; i++) {
+      var c = s.charAt(i);
+      if (inQ) { cur += c; if (c === inQ) inQ = null; continue; }
+      if (c === '"' || c === "'") { inQ = c; cur += c; continue; }
+      if (c === '{' || c === '[') depth++;
+      if (c === '}' || c === ']') depth--;
+      if (c === ',' && depth === 0) { parts.push(cur); cur = ''; continue; }
+      cur += c;
+    }
+    if (cur.trim() !== '') parts.push(cur);
+    return parts;
+  }
+  function unquote(s) {
+    if (s.length >= 2 && ((s.charAt(0) === '"' && s.charAt(s.length - 1) === '"') || (s.charAt(0) === "'" && s.charAt(s.length - 1) === "'"))) return s.slice(1, -1);
+    return s;
+  }
+  function scalarVal(s) {
+    s = s.trim();
+    if (s === 'true') return true;
+    if (s === 'false') return false;
+    if (/^-?\d+$/.test(s)) return parseInt(s, 10);
+    if (/^-?\d+\.\d+$/.test(s)) return parseFloat(s);
+    return unquote(s);
+  }
+  function parseClashProxies(text) {
+    var lines = String(text || '').split(/\r?\n/);
+    var start = -1;
+    for (var i = 0; i < lines.length; i++) { if (/^proxies\s*:/.test(lines[i])) { start = i; break; } }
+    if (start === -1) return [];
+    var items = [];
+    var cur = null, itemIndent = -1, pendingKey = null, pendingObj = null, pendingSubKey = null;
+    function flush() { if (cur) items.push(cur); cur = null; pendingKey = null; pendingObj = null; pendingSubKey = null; }
+    for (var j = start + 1; j < lines.length; j++) {
+      var line = lines[j];
+      if (!line.trim() || /^\s*#/.test(line)) continue;
+      var indent = line.match(/^\s*/)[0].length;
+      if (indent === 0 && !/^\s*-/.test(line)) break; // 下一个顶层段
+      var itemM = line.match(/^(\s*)-\s+(.*)$/);
+      if (itemM && (itemIndent === -1 || indent === itemIndent)) {
+        if (itemIndent === -1) itemIndent = indent;
+        flush();
+        cur = {};
+        var rest = itemM[2].trim();
+        if (rest) {
+          if (rest.charAt(0) === '{') { cur = parseFlowValue(rest); }
+          else { var kv0 = rest.match(/^([^:]+):\s*(.*)$/); if (kv0) cur[unquote(kv0[1].trim())] = parseFlowValue(kv0[2]); }
+        }
+        continue;
+      }
+      if (!cur) continue;
+      var listM = line.match(/^\s*-\s+(.*)$/);
+      if (listM && pendingKey && Array.isArray(cur[pendingKey])) { cur[pendingKey].push(parseFlowValue(listM[1])); continue; }
+      var kv = line.match(/^\s*([^:\s][^:]*):\s*(.*)$/);
+      if (!kv) continue;
+      var key = unquote(kv[1].trim()), val = kv[2].trim();
+      if (pendingObj && indent > pendingObj.indent) {
+        if (val === '') { pendingObj.obj[key] = {}; pendingSubKey = key; pendingObj.subIndent = indent; }
+        else if (pendingSubKey && indent > pendingObj.subIndent) {
+          if (typeof pendingObj.obj[pendingSubKey] !== 'object') pendingObj.obj[pendingSubKey] = {};
+          pendingObj.obj[pendingSubKey][key] = parseFlowValue(val);
+        } else { pendingObj.obj[key] = parseFlowValue(val); pendingSubKey = null; }
+        continue;
+      }
+      pendingObj = null; pendingSubKey = null;
+      if (val === '') { cur[key] = {}; pendingObj = { obj: cur[key], indent: indent, subIndent: -1 }; pendingKey = key; }
+      else if (val === '[]') { cur[key] = []; pendingKey = key; }
+      else { cur[key] = parseFlowValue(val); pendingKey = (val.charAt(0) === '[') ? key : null; }
+      if (Array.isArray(cur[key])) pendingKey = key;
+    }
+    flush();
+    return items.map(clashItemToNode).filter(Boolean);
+  }
+  function clashItemToNode(it) {
+    if (!it || !it.server || !it.type) return null;
+    var d = {};
+    var name = String(it.name || '');
+    if (it.uuid) d.uuid = String(it.uuid);
+    if (it.password !== undefined) d.password = String(it.password);
+    if (it.cipher) d.method = String(it.cipher);
+    if (it.network) d.network = String(it.network);
+    if (it.tls === true) d.tls = true;
+    if (it.servername) d.servername = String(it.servername);
+    else if (it.sni) d.servername = String(it.sni);
+    if (it['client-fingerprint']) d.fingerprint = String(it['client-fingerprint']);
+    if (it.flow) d.flow = String(it.flow);
+    if (it.alpn) d.alpn = Array.isArray(it.alpn) ? it.alpn.map(String) : [String(it.alpn)];
+    if (it['skip-cert-verify'] === true) d.skipCertVerify = true;
+    if (it.alterId !== undefined) d.alterId = Number(it.alterId) || 0;
+    var ro = it['reality-opts'] || {};
+    if (ro['public-key']) { d.security = 'reality'; d.realityPublicKey = String(ro['public-key']); }
+    if (ro['short-id']) d.realityShortId = String(ro['short-id']);
+    if (d.tls && !d.security) d.security = 'tls';
+    var ws = it['ws-opts'] || {};
+    if (ws.path) d.transportPath = String(ws.path);
+    if (ws.headers && (ws.headers.Host || ws.headers.host)) d.transportHost = String(ws.headers.Host || ws.headers.host);
+    var grpc = it['grpc-opts'] || {};
+    if (grpc['grpc-service-name']) d.serviceName = String(grpc['grpc-service-name']);
+    var xh = it['xhttp-opts'] || {};
+    if (xh.path) d.transportPath = String(xh.path);
+    if (xh.host) d.transportHost = String(xh.host);
+    if (xh.mode) d.xhttpMode = String(xh.mode);
+    if (it.obfs) d.obfs = String(it.obfs);
+    if (it['obfs-password']) d.obfsPassword = String(it['obfs-password']);
+    if (it['congestion-controller']) d.congestionControl = String(it['congestion-controller']);
+    if (it['udp-relay-mode']) d.udpRelayMode = String(it['udp-relay-mode']);
+    return { rawName: name, type: String(it.type), server: String(it.server), port: Number(it.port) || 443, details: d };
+  }
+
   var Core = {
     uid: uid,
     isIp: isIp,
@@ -722,7 +940,10 @@
     maskUrl: maskUrl,
     addSubscription: addSubscription,
     parseBulkSubscriptions: parseBulkSubscriptions,
-    generateFullYaml: generateFullYaml
+    generateFullYaml: generateFullYaml,
+    buildShareLink: buildShareLink,
+    decodeSubContent: decodeSubContent,
+    parseClashProxies: parseClashProxies
   };
 
   global.NodeYmlCore = Core;
