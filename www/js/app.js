@@ -54,6 +54,7 @@
         '<div class="card-head"><strong>' + esc(name) + '</strong><span class="badge">' + esc(n.type) + '</span></div>' +
         '<pre class="yaml">' + esc(Core.nodeYaml(n)) + '</pre>' +
         '<div class="row">' +
+        '<button data-act="link" data-id="' + n.id + '">复制链接</button>' +
         '<button data-act="edit" data-id="' + n.id + '">编辑</button>' +
         '<button data-act="del" data-id="' + n.id + '" class="danger">删除</button>' +
         '</div></div>';
@@ -212,6 +213,25 @@
     $('f-tmode').value = d.transportMode || '';
   }
 
+  function copyText(text) {
+    if (navigator.clipboard && navigator.clipboard.writeText) { navigator.clipboard.writeText(text); return; }
+    var ta = document.createElement('textarea');
+    ta.value = text; document.body.appendChild(ta); ta.select();
+    try { document.execCommand('copy'); } catch (e) {}
+    document.body.removeChild(ta);
+  }
+  // 把候选节点批量写入（批量粘贴链接 / 导入订阅内容共用）
+  function importCandidates(cands, parseErrs, out) {
+    var added = 0, skipped = (parseErrs || []).slice();
+    cands.forEach(function (c) {
+      var res = Core.addNode(state, { groupName: c.groupName || '默认', location: c.location || t('未知'), type: c.type, server: c.server, port: c.port, details: c.details });
+      if (res.ok) added++; else skipped.push(res.error);
+    });
+    save(); renderAll();
+    var m = t('导入完成：成功 {0} 条', added);
+    if (skipped.length) m += t('，跳过 {0} 条（{1}）', skipped.length, skipped[0]);
+    msg(out, m, added > 0);
+  }
   function onParse() {
     var text = $('link-input').value.trim();
     var out = $('parse-msg');
@@ -220,6 +240,21 @@
     var first = lines[0] || '';
     // 链接被复制时折行成多行（后续行不含 ://）时，拼回完整链接再解析
     if (lines.length > 1 && first.indexOf('://') !== -1 && lines.slice(1).join('').indexOf('://') === -1) first = lines.join('');
+    // 多条链接（一行一条）→ 批量直接导入
+    var linkLines = lines.filter(function (l) { return l.indexOf('://') !== -1; });
+    if (linkLines.length >= 2) {
+      var bgroup = getGroupValue() || '默认';
+      var bcands = [], berrs = [];
+      linkLines.forEach(function (line) {
+        var p = Core.parseShareLink(line);
+        if (!p.ok) { berrs.push(p.error); return; }
+        bcands.push({ type: p.type, server: p.server, port: p.port, details: p.details, groupName: bgroup, location: p.suggestedLocation || '' });
+      });
+      if (!bcands.length) { msg(out, berrs[0] || t('没有解析到任何节点'), false); return; }
+      $('link-input').value = '';
+      importCandidates(bcands, berrs, out);
+      return;
+    }
     var r = Core.parseShareLink(first);
     if (!r.ok) { msg(out, r.error, false); return; }
     fillForm({ groupName: '默认', location: r.suggestedLocation || '', server: r.server, port: r.port, type: r.type, details: r.details });
@@ -281,6 +316,12 @@
       var id = btn.dataset.id;
       var node = state.nodes.find(function (n) { return n.id === id; });
       if (!node) return;
+      if (btn.dataset.act === 'link') {
+        copyText(Core.buildShareLink(node));
+        var oldTxt = btn.textContent; btn.textContent = t('已复制');
+        setTimeout(function () { btn.textContent = oldTxt; }, 1200);
+        return;
+      }
       if (btn.dataset.act === 'del') {
         if (confirm(t('删除节点 {0}？', Core.buildNodeName(node)))) {
           state.nodes = state.nodes.filter(function (n) { return n.id !== id; });
@@ -390,6 +431,48 @@
       save(); renderAll();
     });
 
+    function allLinks() { return state.nodes.map(function (n) { return Core.buildShareLink(n); }); }
+    $('copy-links-btn').addEventListener('click', function () {
+      if (!state.nodes.length) { msg($('export-msg'), '还没有节点可导出', false); return; }
+      copyText(allLinks().join('\n'));
+      msg($('export-msg'), t('全部 {0} 个节点的链接已复制', state.nodes.length), true);
+    });
+    $('download-links-btn').addEventListener('click', function () {
+      if (!state.nodes.length) { msg($('export-msg'), '还没有节点可导出', false); return; }
+      download('node-links.txt', allLinks().join('\n'), 'text/plain');
+      msg($('export-msg'), '已生成链接清单', true);
+    });
+    $('copy-subformat-btn').addEventListener('click', function () {
+      if (!state.nodes.length) { msg($('export-msg'), '还没有节点可导出', false); return; }
+      copyText(btoa(unescape(encodeURIComponent(allLinks().join('\n')))));
+      msg($('export-msg'), '订阅格式已复制（Base64）', true);
+    });
+    $('import-content-btn').addEventListener('click', function () {
+      var out = $('sub-msg');
+      var text = $('sub-content').value;
+      if (!text.trim()) { msg(out, '请先粘贴要导入的内容', false); return; }
+      var target = $('sub-content-group').value.trim() || '默认';
+      var res = Core.decodeSubContent(text);
+      var cands = [], errs = [];
+      if (res.yaml) {
+        Core.parseClashProxies(res.yaml).forEach(function (it) {
+          var parts = it.rawName.split('|');
+          var g = target, loc = '';
+          if (parts.length >= 4 && parts[2] === it.server && Number(parts[3]) === it.port) { g = parts[0]; loc = parts[1]; }
+          else { var det = Core.detectCountry({ remark: it.rawName, server: it.server }); loc = det && det.loc ? det.loc : ''; }
+          cands.push({ type: it.type, server: it.server, port: it.port, details: it.details, groupName: g, location: loc });
+        });
+      } else {
+        res.links.forEach(function (line) {
+          var p = Core.parseShareLink(line);
+          if (!p.ok) { errs.push(p.error); return; }
+          cands.push({ type: p.type, server: p.server, port: p.port, details: p.details, groupName: target, location: p.suggestedLocation || '' });
+        });
+      }
+      if (!cands.length) { msg(out, t('没有从内容里解析出任何节点'), false); return; }
+      $('sub-content').value = '';
+      importCandidates(cands, errs, out);
+    });
     $('copy-yaml-btn').addEventListener('click', function () {
       renderYaml();
       var text = $('yaml-out').value;
@@ -443,7 +526,7 @@
   }
 
   // ---------------------------------------------------------------- 更新检测
-  var APP_VERSION = '1.0.2';
+  var APP_VERSION = '1.0.3';
   var LATEST_API = 'https://api.github.com/repos/Vardven/node-yml-config-tool/releases/latest';
   var updateReleaseUrl = 'https://github.com/Vardven/node-yml-config-tool/releases/latest';
 
