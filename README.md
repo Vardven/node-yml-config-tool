@@ -46,7 +46,20 @@
 
 网页版就是仓库里的 `www/` 目录，把它放到任何能托管静态网页的地方即可：
 
-**方式一：部署到免费静态托管（有自己的网址，手机电脑都能开）**
+### 🚀 一键部署（推荐）
+
+点下面的按钮，会自动把本仓库克隆到你的 GitHub 账号并部署到 Cloudflare，全程不用敲命令（需要一个免费的 Cloudflare 账号）：
+
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/Vardven/node-yml-config-tool)
+
+1. 点按钮后登录 Cloudflare，按提示授权它访问你的 GitHub
+2. 确认项目名称（可以改），点部署，等一两分钟
+3. 部署成功后会得到一个 `https://<项目名>.<你的子域>.workers.dev` 网址，打开就是网页版
+4. 手机上打开该网址，点浏览器菜单里的「添加到主屏幕」，就能当 App 用
+
+之后想更新版本：在你克隆的那份仓库里同步上游新版，Cloudflare 会自动重新部署。
+
+**方式一：手动部署到免费静态托管（有自己的网址，手机电脑都能开）**
 
 1. 注册一个静态托管服务，如 Cloudflare Pages、Vercel 或 Netlify（免费版即可）
 2. 新建项目，选择上传/导入本仓库（或直接上传 `www` 文件夹），发布目录填 `www`
@@ -127,6 +140,7 @@ npm start       # 桌面版调试运行（Electron）
 │   └── preload.js
 ├── capacitor.config.json       # Capacitor 配置（webDir = www）
 ├── package.json                # 依赖、脚本、electron-builder 打包配置
+├── wrangler.jsonc              # Cloudflare 一键部署配置（静态资源指向 www）
 ├── docs/screenshots/           # README 截图（演示数据）
 ├── .github/workflows/
 │   ├── build-windows.yml       # 云端打 Windows exe
