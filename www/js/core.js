@@ -556,7 +556,7 @@
       var useList = subs.map(function (s) { return s.name; }).join(', ');
       out.push('best: &best {type: url-test, interval: 300, tolerance: 50, lazy: true, use: [' + useList + ']}');
     } else {
-      out.push('best: &best {type: url-test, interval: 300, tolerance: 50, lazy: true}');
+      out.push('best: &best {type: url-test, interval: 300, tolerance: 50, lazy: true, include-all: true}');
     }
     out.push('');
 
