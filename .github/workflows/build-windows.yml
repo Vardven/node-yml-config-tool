@@ -25,6 +25,9 @@ jobs:
         run: npm install
 
       - name: Build Electron app for Windows (NSIS + portable)
+        env:
+          CSC_LINK: ${{ secrets.WINDOWS_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.WINDOWS_CSC_KEY_PASSWORD }}
         run: npx electron-builder --win nsis portable --publish never
 
       - name: Upload EXE artifacts
