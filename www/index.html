@@ -23,6 +23,7 @@
   <button class="tab-btn" data-tab="add">添加节点</button>
   <button class="tab-btn" data-tab="groups">分组</button>
   <button class="tab-btn" data-tab="subs">订阅</button>
+  <button class="tab-btn" data-tab="rules">分流规则</button>
   <button class="tab-btn" data-tab="export">导出配置</button>
 </nav>
 
@@ -133,6 +134,39 @@
     <div id="sub-list"></div>
   </section>
 
+  <!-- 分流规则 -->
+  <section id="tab-rules" class="tab-page">
+    <p class="hint">规则按从上到下的顺序匹配，先命中先走；MATCH 是兜底规则，建议放在最后。目标可以选择你的自定义分组，导出时会自动生成对应的策略组。</p>
+    <div id="rule-list"></div>
+    <h3>添加规则</h3>
+    <div class="row">
+      <select id="rule-type">
+        <option value="RULE-SET">RULE-SET（规则集）</option>
+        <option value="DOMAIN-SUFFIX">DOMAIN-SUFFIX（域名后缀）</option>
+        <option value="DOMAIN-KEYWORD">DOMAIN-KEYWORD（域名关键词）</option>
+        <option value="DOMAIN">DOMAIN（完整域名）</option>
+        <option value="IP-CIDR">IP-CIDR（IP 网段）</option>
+        <option value="GEOIP">GEOIP（国家代码）</option>
+        <option value="MATCH">MATCH（兜底）</option>
+      </select>
+    </div>
+    <div class="row" id="rule-provider-row">
+      <select id="rule-provider"></select>
+    </div>
+    <div class="row" id="rule-payload-row" style="display:none">
+      <input id="rule-payload" placeholder="如 example.com / 1.2.3.0/24 / CN">
+    </div>
+    <div class="row">
+      <select id="rule-target"></select>
+      <label><input type="checkbox" id="rule-noresolve"> no-resolve（不解析域名）</label>
+    </div>
+    <div class="row">
+      <button id="add-rule-btn" class="primary">添加规则</button>
+      <button id="reset-rules-btn">恢复默认规则</button>
+    </div>
+    <p id="rule-msg" class="msg"></p>
+  </section>
+
   <!-- 导出 -->
   <section id="tab-export" class="tab-page">
     <div class="row">
@@ -163,7 +197,7 @@
     </div>
     <div class="card">
       <h3>检查更新</h3>
-      <p>当前版本：<span id="app-version">v1.0.6</span></p>
+      <p>当前版本：<span id="app-version">v1.0.7</span></p>
       <div class="row">
         <button id="check-update-btn">检查更新</button>
       </div>
