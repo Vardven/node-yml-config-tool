@@ -24,11 +24,17 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      - name: Build Electron app for Windows (NSIS + portable)
+      - name: Build Electron app for Windows x64 (NSIS + portable)
         env:
           CSC_LINK: ${{ secrets.WINDOWS_CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.WINDOWS_CSC_KEY_PASSWORD }}
-        run: npx electron-builder --win nsis portable --x64 --arm64 --publish never
+        run: npx electron-builder --win nsis portable --x64 --publish never
+
+      - name: Build Electron app for Windows ARM64 (NSIS + portable)
+        env:
+          CSC_LINK: ${{ secrets.WINDOWS_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.WINDOWS_CSC_KEY_PASSWORD }}
+        run: npx electron-builder --win nsis portable --arm64 --publish never
 
       - name: Upload EXE artifacts
         uses: actions/upload-artifact@v4
