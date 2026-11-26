@@ -122,7 +122,9 @@
   // 分享链接解析
   // ---------------------------------------------------------------------------
   function parseShareLink(raw) {
-    var link = String(raw || '').trim();
+    // 分享链接里不会有合法的空白字符；来源页面常把 IP/域名写成「18. 118. 164. 154」这种带空格的形式，
+    // 复制时还会断行，先把所有空白（空格、换行、制表符）去掉再解析。
+    var link = String(raw || '').replace(/\s+/g, '');
     if (!link) return { ok: false, error: '链接为空' };
     var scheme = (link.match(/^([a-zA-Z0-9]+):\/\//) || [])[1];
     if (!scheme) return { ok: false, error: '无法识别协议' };
@@ -178,7 +180,7 @@
     if (flow) details.flow = flow;
     var alpn = q.get('alpn') || '';
     if (alpn) details.alpn = alpn.split(',').map(function (s) { return s.trim(); }).filter(Boolean);
-    if (q.get('allowInsecure') === '1' || q.get('insecure') === '1') details.skipCertVerify = true;
+    if (q.get('allowInsecure') === '1' || q.get('insecure') === '1' || q.get('allow_insecure') === '1') details.skipCertVerify = true;
 
     // 传输层参数（ws / grpc / h2 / xhttp 等通用保存）
     var tHost = q.get('host') || '';
