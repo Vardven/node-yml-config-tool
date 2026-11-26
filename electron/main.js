@@ -1,5 +1,5 @@
 // Electron 主进程：打开 www/index.html，数据由页面自己的 localStorage 保存
-const { app, BrowserWindow, Menu } = require('electron');
+const { app, BrowserWindow, Menu, shell } = require('electron');
 const path = require('path');
 
 function createWindow() {
@@ -16,6 +16,13 @@ function createWindow() {
     }
   });
   Menu.setApplicationMenu(null);
+  // 页面里的 GitHub 等外链用系统浏览器打开，不在软件窗口里跳转
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    if (url.startsWith('http://') || url.startsWith('https://')) {
+      shell.openExternal(url);
+    }
+    return { action: 'deny' };
+  });
   win.loadFile(path.join(__dirname, '..', 'www', 'index.html'));
 }
 
