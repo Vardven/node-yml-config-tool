@@ -179,12 +179,14 @@
       var opts = targets.map(function (tg) {
         return '<option value="' + esc(tg) + '"' + (tg === r.target ? ' selected' : '') + '>' + esc(tg) + '</option>';
       }).join('');
+      var nameInput = r.builtin ? '' :
+        '<input class="rule-name-input" data-idx="' + i + '" value="' + esc(r.name || '') + '" placeholder="' + esc(t('规则名称（可选）')) + '">';
       var acts = r.builtin
         ? '<span class="rule-badge">' + esc(t('默认')) + '</span>'
         : '<button data-ract="up" data-idx="' + i + '"' + (i === 0 ? ' disabled' : '') + '>↑</button>' +
           '<button data-ract="down" data-idx="' + i + '"' + (i === state.rules.length - 1 ? ' disabled' : '') + '>↓</button>' +
           '<button data-ract="del" data-idx="' + i + '">' + esc(t('删除')) + '</button>';
-      return '<div class="rule-row"><span class="rule-text">' + esc(ruleText(r)) + '</span>' +
+      return '<div class="rule-row">' + nameInput + '<span class="rule-text">' + esc(ruleText(r)) + '</span>' +
         '<select class="rule-target-sel" data-idx="' + i + '">' + opts + '</select>' + acts + '</div>';
     }).join('');
     $('rule-provider').innerHTML = Core.RULE_PROVIDERS.map(function (p) { return '<option value="' + esc(p) + '">' + esc(p) + '</option>'; }).join('');
@@ -372,9 +374,10 @@
     });
 
     $('rule-list').addEventListener('change', function (e) {
-      var sel = e.target.closest('.rule-target-sel'); if (!sel) return;
-      state.rules[Number(sel.dataset.idx)].target = sel.value;
-      save();
+      var sel = e.target.closest('.rule-target-sel');
+      if (sel) { state.rules[Number(sel.dataset.idx)].target = sel.value; save(); return; }
+      var ni = e.target.closest('.rule-name-input');
+      if (ni) { state.rules[Number(ni.dataset.idx)].name = ni.value.trim(); save(); }
     });
     $('rule-list').addEventListener('click', function (e) {
       var btn = e.target.closest('button'); if (!btn) return;
@@ -390,8 +393,9 @@
       var ty = $('rule-type').value;
       var payload = ty === 'RULE-SET' ? $('rule-provider').value : $('rule-payload').value.trim();
       if (ty !== 'MATCH' && !payload) { msg($('rule-msg'), t('请输入规则值'), false); return; }
-      state.rules.push({ type: ty, payload: ty === 'MATCH' ? '' : payload, target: $('rule-target').value, noResolve: $('rule-noresolve').checked && ty !== 'MATCH', builtin: false });
+      state.rules.push({ type: ty, payload: ty === 'MATCH' ? '' : payload, target: $('rule-target').value, noResolve: $('rule-noresolve').checked && ty !== 'MATCH', builtin: false, name: $('rule-name').value.trim() });
       $('rule-payload').value = '';
+      $('rule-name').value = '';
       save(); renderRules(); applyI18n();
       msg($('rule-msg'), t('规则已添加'), true);
     });
