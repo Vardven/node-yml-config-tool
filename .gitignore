@@ -1,0 +1,16 @@
+node_modules/
+dist/
+out/
+release/
+apk-out/
+android/
+ios/
+.gradle/
+*.keystore
+*.jks
+keystore.properties
+local.properties
+.DS_Store
+Thumbs.db
+*.log
+.env
