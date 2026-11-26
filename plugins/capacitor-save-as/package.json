@@ -1,0 +1,16 @@
+{
+  "name": "capacitor-save-as",
+  "version": "1.0.0",
+  "description": "Local Capacitor plugin: save generated files through Android's system Save-as picker (Storage Access Framework, ACTION_CREATE_DOCUMENT) so users pick the folder in the file manager.",
+  "main": "index.js",
+  "files": [
+    "android/",
+    "index.js"
+  ],
+  "capacitor": {
+    "android": {
+      "src": "android"
+    }
+  },
+  "license": "CC-BY-NC-SA-4.0"
+}
