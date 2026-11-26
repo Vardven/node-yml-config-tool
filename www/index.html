@@ -143,9 +143,24 @@
         <a class="btn-link" href="https://github.com/Vardven/node-yml-config-tool" target="_blank" rel="noopener">查看本软件源码仓库</a>
       </div>
       <p class="hint">作者主页：github.com/Vardven ｜ 源码仓库：github.com/Vardven/node-yml-config-tool</p>
+      <div class="row">
+        <button id="check-update-btn">检查更新</button>
+      </div>
+      <p id="update-check-msg" class="msg"></p>
     </div>
   </section>
 </main>
+
+<div id="update-modal" class="modal-mask" hidden>
+  <div class="modal card">
+    <h3 id="update-title">发现新版本</h3>
+    <p id="update-desc"></p>
+    <div class="row">
+      <button id="update-now-btn" class="primary">立即更新</button>
+      <button id="update-later-btn">取消</button>
+    </div>
+  </div>
+</div>
 
 <footer><p class="hint">数据保存在浏览器 localStorage 中，只在这台设备上。换设备请用「导出数据备份」迁移。</p></footer>
 <script src="js/core.js"></script>
