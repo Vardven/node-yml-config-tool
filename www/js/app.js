@@ -30,7 +30,10 @@
   function msg(el, text, ok) {
     el.textContent = text || '';
     el.className = 'msg ' + (ok ? 'ok' : 'err');
+    applyI18n(el);
   }
+  var t = window.t || function (s) { return s; };
+  function applyI18n(root) { if (window.i18nApply) window.i18nApply(root || document.body); }
 
   // ---------------------------------------------------------------- 节点列表
   function renderNodes() {
@@ -43,7 +46,7 @@
       if (q && (Core.buildNodeName(n) + ' ' + n.server).toLowerCase().indexOf(q) === -1) return false;
       return true;
     });
-    $('node-count').textContent = '共 ' + state.nodes.length + ' 个节点' + (list.length !== state.nodes.length ? '，筛选后 ' + list.length + ' 个' : '');
+    $('node-count').textContent = t('共 {0} 个节点', state.nodes.length) + (list.length !== state.nodes.length ? t('，筛选后 {0} 个', list.length) : '');
     $('node-empty').style.display = state.nodes.length ? 'none' : 'block';
     $('node-list').innerHTML = list.map(function (n) {
       var name = Core.buildNodeName(n);
@@ -67,7 +70,7 @@
     var groups = Core.listGroups(state);
     $('group-empty').style.display = groups.length ? 'none' : 'block';
     $('group-list').innerHTML = groups.map(function (g) {
-      return '<div class="card"><div class="card-head"><strong>' + esc(g.name) + '</strong><span>' + g.count + ' 个节点</span></div>' +
+      return '<div class="card"><div class="card-head"><strong>' + esc(g.name) + '</strong><span>' + esc(t('{0} 个节点', g.count)) + '</span></div>' +
         '<div class="row" data-view="btns">' +
         '<button data-gact="rename" data-name="' + esc(g.name) + '">重命名</button>' +
         '<button data-gact="del" data-name="' + esc(g.name) + '" class="danger">删除</button>' +
@@ -138,7 +141,7 @@
     }).join('');
   }
 
-  function renderAll() { renderNodes(); renderGroups(); renderSubs(); renderYaml(); }
+  function renderAll() { renderNodes(); renderGroups(); renderSubs(); renderYaml(); applyI18n(); }
   function renderYaml() { $('yaml-out').value = Core.generateFullYaml(state); }
 
   // ---------------------------------------------------------------- 添加/编辑节点
@@ -220,7 +223,7 @@
     var r = Core.parseShareLink(first);
     if (!r.ok) { msg(out, r.error, false); return; }
     fillForm({ groupName: '默认', location: r.suggestedLocation || '', server: r.server, port: r.port, type: r.type, details: r.details });
-    msg(out, '已解析：' + r.type + ' / ' + r.server + ':' + r.port + '。' + (r.locationNote || '') + ' 已默认放入「默认」分组，请确认后保存。', true);
+    msg(out, t('已解析：{0} / {1}:{2}。{3} 已默认放入「默认」分组，请确认后保存。', r.type, r.server, r.port, r.locationNote || ''), true);
   }
 
   function onSaveNode() {
@@ -235,17 +238,17 @@
       if (idx === -1) { msg(out, '要编辑的节点不存在', false); return; }
       var others = state.nodes.filter(function (n) { return n.id !== editingNodeId; });
       var dup = others.some(function (n) { return Core.buildNodeName(n) === Core.buildNodeName(node); });
-      if (dup) { msg(out, '节点名重复：' + Core.buildNodeName(node), false); return; }
+      if (dup) { msg(out, t('节点名重复：{0}', Core.buildNodeName(node)), false); return; }
       node.id = editingNodeId;
       state.nodes[idx] = node;
       if (state.groups.indexOf(node.groupName) === -1) state.groups.push(node.groupName);
       editingNodeId = null;
-      $('save-node-btn').textContent = '保存节点';
-      msg(out, '已更新节点：' + Core.buildNodeName(node), true);
+      $('save-node-btn').textContent = t('保存节点');
+      msg(out, t('已更新节点：{0}', Core.buildNodeName(node)), true);
     } else {
       var res = Core.addNode(state, node);
       if (!res.ok) { msg(out, res.error, false); return; }
-      msg(out, '已添加节点：' + res.node.name, true);
+      msg(out, t('已添加节点：{0}', res.node.name), true);
     }
     save(); renderAll();
   }
@@ -279,14 +282,14 @@
       var node = state.nodes.find(function (n) { return n.id === id; });
       if (!node) return;
       if (btn.dataset.act === 'del') {
-        if (confirm('删除节点 ' + Core.buildNodeName(node) + '？')) {
+        if (confirm(t('删除节点 {0}？', Core.buildNodeName(node)))) {
           state.nodes = state.nodes.filter(function (n) { return n.id !== id; });
           save(); renderAll();
         }
       } else if (btn.dataset.act === 'edit') {
         editingNodeId = id;
         fillForm(node);
-        $('save-node-btn').textContent = '保存修改';
+        $('save-node-btn').textContent = t('保存修改');
         document.querySelector('[data-tab="add"]').click();
       }
     });
@@ -295,7 +298,7 @@
     $('save-node-btn').addEventListener('click', onSaveNode);
     $('clear-form-btn').addEventListener('click', function () {
       editingNodeId = null;
-      $('save-node-btn').textContent = '保存节点';
+      $('save-node-btn').textContent = t('保存节点');
       fillForm({ details: {} });
     });
 
@@ -325,12 +328,12 @@
         var inp = ed.querySelector('input'); if (inp) { inp.focus(); inp.select(); }
         return;
       }
-      if (btn.dataset.gact === 'cancel') { renderGroups(); return; }
+      if (btn.dataset.gact === 'cancel') { renderGroups(); applyI18n(); return; }
       if (btn.dataset.gact === 'save-rename') {
         var input = card.querySelector('[data-field="rename"]');
         var res = Core.renameGroup(state, name, input ? input.value : '');
         if (!res.ok) { msg(out, res.error, false); return; }
-        msg(out, '已改名，同步更新了 ' + res.updatedNodes + ' 个节点', true);
+        msg(out, t('已改名，同步更新了 {0} 个节点', res.updatedNodes), true);
       } else if (btn.dataset.gact === 'del') {
         var r2 = Core.deleteGroup(state, name);
         if (!r2.ok) { msg(out, r2.error, false); return; }
@@ -344,14 +347,14 @@
       var out = $('sub-msg');
       if (!res.ok) { msg(out, res.error, false); return; }
       $('sub-name').value = ''; $('sub-url').value = '';
-      msg(out, '已添加订阅：' + res.sub.name, true);
+      msg(out, t('已添加订阅：{0}', res.sub.name), true);
       save(); renderAll();
     });
     $('bulk-sub-btn').addEventListener('click', function () {
       var res = Core.parseBulkSubscriptions(state, $('sub-bulk').value);
       var out = $('sub-msg');
-      var text = '批量添加完成：成功 ' + res.added.length + ' 条';
-      if (res.skipped.length) text += '，跳过 ' + res.skipped.length + ' 条（' + res.skipped.map(function (s) { return s.reason; }).join('；') + '）';
+      var text = t('批量添加完成：成功 {0} 条', res.added.length);
+      if (res.skipped.length) text += t('，跳过 {0} 条（{1}）', res.skipped.length, res.skipped.map(function (s) { return s.reason; }).join(t('；')));
       msg(out, text, res.added.length > 0);
       save(); renderAll();
     });
@@ -360,7 +363,7 @@
       var sub = state.subscriptions.find(function (s) { return s.id === btn.dataset.id; });
       if (!sub) return;
       var out = $('sub-msg');
-      if (btn.dataset.sact === 'toggle') { revealSubs[sub.id] = !revealSubs[sub.id]; renderSubs(); return; }
+      if (btn.dataset.sact === 'toggle') { revealSubs[sub.id] = !revealSubs[sub.id]; renderSubs(); applyI18n(); return; }
       var card = btn.closest('.card');
       if (btn.dataset.sact === 'rename' || btn.dataset.sact === 'url') {
         // 不用系统 prompt（在桌面端/部分浏览器里不弹出），改成卡片内编辑
@@ -369,7 +372,7 @@
         if (ed) { ed.style.display = ''; var inp = ed.querySelector('input'); if (inp) { inp.focus(); inp.select(); } }
         return;
       }
-      if (btn.dataset.sact === 'cancel') { renderSubs(); return; }
+      if (btn.dataset.sact === 'cancel') { renderSubs(); applyI18n(); return; }
       if (btn.dataset.sact === 'save-name') {
         var nn = card.querySelector('[data-field="name"]').value.trim();
         if (!nn) { msg(out, '订阅名不能为空', false); return; }
@@ -381,7 +384,7 @@
         if (state.subscriptions.some(function (s) { return s.id !== sub.id && s.url === nu; })) { msg(out, '该链接已经存在', false); return; }
         sub.url = nu;
       } else if (btn.dataset.sact === 'del') {
-        if (confirm('删除订阅「' + sub.name + '」？')) { state.subscriptions = state.subscriptions.filter(function (s) { return s.id !== sub.id; }); }
+        if (confirm(t('删除订阅「{0}」？', sub.name))) { state.subscriptions = state.subscriptions.filter(function (s) { return s.id !== sub.id; }); }
         else return;
       } else return;
       save(); renderAll();
@@ -407,15 +410,29 @@
       reader.onload = function () {
         try {
           var s = JSON.parse(reader.result);
-          if (!s || !Array.isArray(s.nodes) || !Array.isArray(s.groups) || !Array.isArray(s.subscriptions)) throw new Error('格式不对');
+          if (!s || !Array.isArray(s.nodes) || !Array.isArray(s.groups) || !Array.isArray(s.subscriptions)) throw new Error(t('格式不对'));
           if (s.groups.indexOf('默认') === -1) s.groups.unshift('默认');
           state = s; save(); renderAll();
           msg($('export-msg'), '备份已导入', true);
-        } catch (err) { msg($('export-msg'), '导入失败：' + err.message, false); }
+        } catch (err) { msg($('export-msg'), t('导入失败：{0}', err.message), false); }
       };
       reader.readAsText(file);
       this.value = '';
     });
+
+    // 语言设置：填充语言下拉并绑定切换（立即生效并记住选择）
+    if (window.I18N_LANGS && $('lang-select')) {
+      var sel = $('lang-select');
+      sel.innerHTML = window.I18N_LANGS.map(function (l) {
+        return '<option value="' + l.code + '">' + l.name + '</option>';
+      }).join('');
+      sel.value = window.i18nGetLang ? window.i18nGetLang() : 'zh-CN';
+      sel.setAttribute('data-no-i18n', '');
+      sel.addEventListener('change', function () {
+        if (window.i18nSetLang) window.i18nSetLang(sel.value);
+        renderAll();
+      });
+    }
 
     $('check-update-btn').addEventListener('click', function () { checkForUpdates(true); });
     $('update-now-btn').addEventListener('click', function () {
@@ -449,12 +466,13 @@
         var latest = String(d.tag_name || '').replace(/^v/i, '');
         if (latest && isNewerVersion(latest, APP_VERSION)) {
           updateReleaseUrl = d.html_url || updateReleaseUrl;
-          $('update-title').textContent = '发现新版本 v' + latest;
-          $('update-desc').textContent = '当前版本 v' + APP_VERSION + '，最新版本 v' + latest + '。点「立即更新」打开下载页，下载新版本安装即可。';
+          $('update-title').textContent = t('发现新版本 v{0}', latest);
+          $('update-desc').textContent = t('当前版本 v{0}，最新版本 v{1}。点「立即更新」打开下载页，下载新版本安装即可。', APP_VERSION, latest);
           $('update-modal').hidden = false;
-          if (manual && out) msg(out, '发现新版本 v' + latest, true);
+          applyI18n($('update-modal'));
+          if (manual && out) msg(out, t('发现新版本 v{0}', latest), true);
         } else if (manual && out) {
-          msg(out, '已是最新版本（v' + APP_VERSION + '）', true);
+          msg(out, t('已是最新版本（v{0}）', APP_VERSION), true);
         }
       })
       .catch(function () {
