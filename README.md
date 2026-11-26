@@ -107,7 +107,7 @@ Windows 产物包含安装版和免安装（portable）两种 exe；安卓产物
 ├── .github/workflows/
 │   ├── build-windows.yml       # 云端打 Windows exe
 │   └── build-android.yml       # 云端打安卓 apk
-├── LICENSE                     # MIT
+├── LICENSE                     # CC BY-NC-SA 4.0
 └── README.md
 ```
 
@@ -115,4 +115,6 @@ Windows 产物包含安装版和免安装（portable）两种 exe；安卓产物
 
 ## 许可证
 
-MIT，见 [LICENSE](LICENSE)。
+CC BY-NC-SA 4.0（署名-非商业性使用-相同方式共享），见 [LICENSE](LICENSE)。
+
+简单说：可以免费使用、查看和修改源码，但**不得用于商业用途**；使用或修改必须**注明原作者 Vardven 及本仓库地址**；修改后的版本必须以**相同协议**公开发布。
