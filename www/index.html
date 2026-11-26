@@ -102,7 +102,10 @@
       <button id="add-group-btn" class="primary">新建分组</button>
     </div>
     <p id="group-msg" class="msg"></p>
-    <div id="group-empty" class="empty">还没有任何分组。先新建一个分组，再去添加节点。</div>
+    <h3>策略组</h3>
+    <div id="policy-list"></div>
+    <h3>自定义分组</h3>
+    <div id="group-empty" class="empty">还没有自定义分组。用上方输入框新建一个吧。</div>
     <div id="group-list"></div>
   </section>
 
@@ -122,7 +125,7 @@
     <label>把订阅内容粘贴到这里：支持订阅返回的 base64 内容、一行一条的链接列表、Clash 配置 YAML，会解析成单个节点导入</label>
     <textarea id="sub-content" rows="6" placeholder="粘贴订阅内容…"></textarea>
     <div class="row">
-      <input id="sub-content-group" placeholder="导入到分组，留空用「默认」">
+      <input id="sub-content-group" placeholder="导入到分组，留空用「全部节点」">
       <button id="import-content-btn" class="primary">导入为节点</button>
     </div>
     <p id="sub-msg" class="msg"></p>
@@ -160,7 +163,7 @@
     </div>
     <div class="card">
       <h3>检查更新</h3>
-      <p>当前版本：<span id="app-version">v1.0.4</span></p>
+      <p>当前版本：<span id="app-version">v1.0.5</span></p>
       <div class="row">
         <button id="check-update-btn">检查更新</button>
       </div>
