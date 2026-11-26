@@ -8,7 +8,7 @@ function createWindow() {
     height: 800,
     minWidth: 360,
     minHeight: 560,
-    title: '节点 YML 配置工具',
+    title: 'Clash YML 配置工具',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
