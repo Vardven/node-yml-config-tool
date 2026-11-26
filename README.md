@@ -57,7 +57,11 @@
 3. 部署成功后会得到一个 `https://<项目名>.<你的子域>.workers.dev` 网址，打开就是网页版
 4. 手机上打开该网址，点浏览器菜单里的「添加到主屏幕」，就能当 App 用
 
-之后想更新版本：在你克隆的那份仓库里同步上游新版，Cloudflare 会自动重新部署。
+**网页版怎么更新？** 一键部署是把代码**复制**一份到你自己的 GitHub 账号里，Cloudflare 只盯着你那份副本——原仓库发新版不会自动流进副本，所以不会自动更新。更新方法（先在工具里导出一份 JSON 备份更稳妥）：
+
+1. 打开你 GitHub 里克隆的那份仓库，点 **Sync fork → Update branch**（把上游新版同步过来）
+2. Cloudflare 检测到副本更新后会自动重新部署，等 1~2 分钟，刷新页面就是新版（网址不变，浏览器里的数据还在）
+3. 如果仓库里没有 Sync fork 按钮，用 git 也行：`git remote add upstream https://github.com/Vardven/node-yml-config-tool.git` 然后 `git pull upstream main && git push`
 
 **方式一：手动部署到免费静态托管（有自己的网址，手机电脑都能开）**
 
