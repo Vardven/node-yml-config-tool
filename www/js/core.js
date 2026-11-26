@@ -13,6 +13,17 @@
     return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
   }
 
+  // 界面文案本地化：浏览器里有 i18n.js 的 window.t 时用它翻译，否则用中文原文（Node 测试环境）
+  function ct(zh, a0, a1, a2, a3) {
+    if (typeof window !== 'undefined' && typeof window.t === 'function') return window.t(zh, a0, a1, a2, a3);
+    var s = zh;
+    if (a0 !== undefined) s = s.split('{0}').join(String(a0));
+    if (a1 !== undefined) s = s.split('{1}').join(String(a1));
+    if (a2 !== undefined) s = s.split('{2}').join(String(a2));
+    if (a3 !== undefined) s = s.split('{3}').join(String(a3));
+    return s;
+  }
+
   function isIp(host) {
     if (!host) return false;
     if (/^\d{1,3}(\.\d{1,3}){3}$/.test(host)) return true;
@@ -93,29 +104,29 @@
         var hit = c.codes.some(function (code) {
           return new RegExp('(^|[^A-Z])' + code + '([^A-Z]|$)').test(up);
         }) || c.words.some(function (w) { return remark.indexOf(w) !== -1; });
-        if (hit) return { location: c.loc, source: 'remark', note: '按链接备注检测为「' + c.loc + '」' };
+        if (hit) return { location: ct(c.loc), source: 'remark', note: ct('按链接备注检测为「{0}」', ct(c.loc)) };
       }
     }
 
     // 2) CDN 前置入口：无法确定
     for (var j = 0; j < CDN_MARKERS.length; j++) {
       if (server.indexOf(CDN_MARKERS[j]) !== -1) {
-        return { location: null, source: 'cdn', note: '服务器像是 CDN 前置入口，无法确定真实出口国家，请手动填写地点' };
+        return { location: null, source: 'cdn', note: ct('服务器像是 CDN 前置入口，无法确定真实出口国家，请手动填写地点') };
       }
     }
 
     // 3) 纯 IP：无法确定（不做 IP 地理猜测）
     if (isIp(server)) {
-      return { location: null, source: 'unknown', note: '服务器是纯 IP，无法自动确定国家，请手动填写地点' };
+      return { location: null, source: 'unknown', note: ct('服务器是纯 IP，无法自动确定国家，请手动填写地点') };
     }
 
     // 4) 域名后缀
     var m = server.match(/\.([a-z]{2})$/);
     if (m && TLD_MAP[m[1]]) {
-      return { location: TLD_MAP[m[1]], source: 'tld', note: '按域名后缀 .' + m[1] + ' 检测为「' + TLD_MAP[m[1]] + '」' };
+      return { location: ct(TLD_MAP[m[1]]), source: 'tld', note: ct('按域名后缀 .{0} 检测为「{1}」', m[1], ct(TLD_MAP[m[1]])) };
     }
 
-    return { location: null, source: 'unknown', note: '无法自动确定国家，请手动填写地点' };
+    return { location: null, source: 'unknown', note: ct('无法自动确定国家，请手动填写地点') };
   }
 
   // ---------------------------------------------------------------------------
@@ -125,16 +136,16 @@
     // 分享链接里不会有合法的空白字符；来源页面常把 IP/域名写成「18. 118. 164. 154」这种带空格的形式，
     // 复制时还会断行，先把所有空白（空格、换行、制表符）去掉再解析。
     var link = String(raw || '').replace(/\s+/g, '');
-    if (!link) return { ok: false, error: '链接为空' };
+    if (!link) return { ok: false, error: ct('链接为空') };
     var scheme = (link.match(/^([a-zA-Z0-9]+):\/\//) || [])[1];
-    if (!scheme) return { ok: false, error: '无法识别协议' };
+    if (!scheme) return { ok: false, error: ct('无法识别协议') };
     scheme = scheme.toLowerCase();
     try {
       if (scheme === 'vmess') return parseVmess(link);
       if (scheme === 'ss') return parseSs(link);
       return parseUrlStyle(link, scheme);
     } catch (e) {
-      return { ok: false, error: '解析失败：' + e.message };
+      return { ok: false, error: ct('解析失败：{0}', e.message) };
     }
   }
 
@@ -150,7 +161,7 @@
   function parseUrlStyle(link, scheme) {
     var typeMap = { vless: 'vless', trojan: 'trojan', hysteria2: 'hysteria2', hy2: 'hysteria2', tuic: 'tuic', anytls: 'anytls' };
     var type = typeMap[scheme];
-    if (!type) return { ok: false, error: '暂不支持的协议：' + scheme };
+    if (!type) return { ok: false, error: ct('暂不支持的协议：{0}', scheme) };
     // 不依赖 new URL()：部分浏览器/桌面壳（旧版 Chromium 等）对 vless/tuic/anytls 这类
     // 非标准协议只解析出 query 参数，hostname/port/userinfo 一律返回空、端口回落 443。
     // 这里按 scheme://userinfo@host:port?query#remark 结构全部手动拆解，任何环境结果一致。
@@ -294,11 +305,11 @@
     } else {
       var decoded = decodeBase64(rest);
       var m = decoded.match(/^([^:]+):(.+)@(.+)$/);
-      if (!m) return { ok: false, error: 'ss 链接格式无法解析' };
+      if (!m) return { ok: false, error: ct('ss 链接格式无法解析') };
       method = m[1]; password = m[2]; hostport = m[3];
     }
     var hp = hostport.match(/^(.+):(\d+)$/);
-    if (!hp) return { ok: false, error: 'ss 链接缺少地址或端口' };
+    if (!hp) return { ok: false, error: ct('ss 链接缺少地址或端口') };
     return finishParse({
       type: 'ss',
       server: hp[1].replace(/^\[|\]$/g, ''),
@@ -408,21 +419,21 @@
 
   function addGroup(state, name) {
     name = String(name || '').trim();
-    if (!name) return { ok: false, error: '分组名不能为空' };
-    if (name.indexOf('|') !== -1) return { ok: false, error: '分组名不能包含「|」' };
-    if (listGroups(state).some(function (g) { return g.name === name; })) return { ok: false, error: '分组「' + name + '」已经存在' };
+    if (!name) return { ok: false, error: ct('分组名不能为空') };
+    if (name.indexOf('|') !== -1) return { ok: false, error: ct('分组名不能包含「|」') };
+    if (listGroups(state).some(function (g) { return g.name === name; })) return { ok: false, error: ct('分组「{0}」已经存在', name) };
     state.groups.push(name);
     return { ok: true };
   }
 
   function renameGroup(state, oldName, newName) {
     newName = String(newName || '').trim();
-    if (!newName) return { ok: false, error: '新分组名不能为空' };
-    if (newName.indexOf('|') !== -1) return { ok: false, error: '分组名不能包含「|」' };
+    if (!newName) return { ok: false, error: ct('新分组名不能为空') };
+    if (newName.indexOf('|') !== -1) return { ok: false, error: ct('分组名不能包含「|」') };
     var exists = listGroups(state).some(function (g) { return g.name === oldName; });
-    if (!exists) return { ok: false, error: '分组「' + oldName + '」不存在' };
+    if (!exists) return { ok: false, error: ct('分组「{0}」不存在', oldName) };
     if (newName !== oldName && listGroups(state).some(function (g) { return g.name === newName; })) {
-      return { ok: false, error: '分组「' + newName + '」已经存在' };
+      return { ok: false, error: ct('分组「{0}」已经存在', newName) };
     }
     var updated = 0;
     state.nodes.forEach(function (n) { if (n.groupName === oldName) { n.groupName = newName; updated++; } });
@@ -433,7 +444,7 @@
 
   function deleteGroup(state, name) {
     var count = state.nodes.filter(function (n) { return n.groupName === name; }).length;
-    if (count > 0) return { ok: false, error: '分组「' + name + '」里还有 ' + count + ' 个节点，请先把节点移到其它分组或删掉' };
+    if (count > 0) return { ok: false, error: ct('分组「{0}」里还有 {1} 个节点，请先把节点移到其它分组或删掉', name, count) };
     state.groups = state.groups.filter(function (g) { return g !== name; });
     return { ok: true };
   }
@@ -441,7 +452,7 @@
   function addNode(state, node) {
     node.name = buildNodeName(node);
     if (state.nodes.some(function (n) { return buildNodeName(n) === node.name; })) {
-      return { ok: false, error: '节点名重复：' + node.name + '（同分组同地址同端口时，请加第 5 段后缀区分）' };
+      return { ok: false, error: ct('节点名重复：{0}（同分组同地址同端口时，请加第 5 段后缀区分）', node.name) };
     }
     node.id = node.id || uid();
     state.nodes.push(node);
@@ -468,10 +479,10 @@
 
   function addSubscription(state, name, url) {
     url = String(url || '').trim();
-    if (!/^https?:\/\/\S+$/i.test(url)) return { ok: false, error: '不是有效的 http(s) 链接' };
-    if (state.subscriptions.some(function (s) { return s.url === url; })) return { ok: false, error: '该订阅链接已经存在' };
+    if (!/^https?:\/\/\S+$/i.test(url)) return { ok: false, error: ct('不是有效的 http(s) 链接') };
+    if (state.subscriptions.some(function (s) { return s.url === url; })) return { ok: false, error: ct('该订阅链接已经存在') };
     name = String(name || '').trim() || autoSubName(url);
-    if (state.subscriptions.some(function (s) { return s.name === name; })) return { ok: false, error: '订阅名「' + name + '」已经存在' };
+    if (state.subscriptions.some(function (s) { return s.name === name; })) return { ok: false, error: ct('订阅名「{0}」已经存在', name) };
     var sub = { id: uid(), name: name, url: url };
     state.subscriptions.push(sub);
     return { ok: true, sub: sub };
@@ -483,7 +494,7 @@
       var line = rawLine.trim();
       if (!line) return;
       var m = line.match(/https?:\/\/\S+/i);
-      if (!m) { skipped.push({ line: line, reason: '没有找到链接' }); return; }
+      if (!m) { skipped.push({ line: line, reason: ct('没有找到链接') }); return; }
       var url = m[0];
       var name = line.slice(0, m.index).replace(/[:：\-—\s]+$/, '').trim();
       var res = addSubscription(state, name, url);
