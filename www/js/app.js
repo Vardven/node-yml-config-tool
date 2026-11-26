@@ -74,6 +74,21 @@
     el.textContent = text || '';
     el.className = 'msg ' + (ok ? 'ok' : 'err');
     applyI18n(el);
+    if (text) toast(text, ok);
+  }
+  // 屏幕底部悬浮提示：pointer-events:none，不挡滑动和点击，几秒后自动消失
+  var toastTimer = null;
+  function toast(text, ok) {
+    var el = $('toast');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'toast';
+      document.body.appendChild(el);
+    }
+    el.textContent = text || '';
+    el.className = 'toast show ' + (ok ? 'ok' : 'err');
+    if (toastTimer) clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { el.className = 'toast'; }, 2800);
   }
   var t = window.t || function (s) { return s; };
   function applyI18n(root) { if (window.i18nApply) window.i18nApply(root || document.body); }
@@ -123,14 +138,23 @@
     var groups = Core.listGroups(state).filter(function (g) { return g.custom; });
     $('group-empty').style.display = groups.length ? 'none' : 'block';
     $('group-list').innerHTML = groups.map(function (g) {
+      var targets = Core.listGroups(state).filter(function (x) { return x.name !== g.name; }).map(function (x) {
+        return '<option value="' + esc(x.name) + '">' + esc(x.name) + '</option>';
+      }).join('');
       return '<div class="card"><div class="card-head"><strong>' + esc(g.name) + '</strong><span>' + esc(t('{0} 个节点', g.count)) + '</span></div>' +
         '<div class="row" data-view="btns">' +
         '<button data-gact="rename" data-name="' + esc(g.name) + '">重命名</button>' +
+        (g.count > 0 ? '<button data-gact="move" data-name="' + esc(g.name) + '">移动节点</button>' : '') +
         '<button data-gact="del" data-name="' + esc(g.name) + '" class="danger">删除</button>' +
         '</div>' +
         '<div class="row" data-view="edit" style="display:none">' +
         '<input type="text" data-field="rename" value="' + esc(g.name) + '">' +
         '<button data-gact="save-rename" data-name="' + esc(g.name) + '">保存</button>' +
+        '<button data-gact="cancel" data-name="' + esc(g.name) + '">取消</button>' +
+        '</div>' +
+        '<div class="row" data-view="move" style="display:none">' +
+        '<label>移动到分组：<select data-field="move-target">' + targets + '</select></label>' +
+        '<button data-gact="save-move" data-name="' + esc(g.name) + '" class="primary">确认移动</button>' +
         '<button data-gact="cancel" data-name="' + esc(g.name) + '">取消</button>' +
         '</div></div>';
     }).join('');
@@ -497,9 +521,17 @@
       if (btn.dataset.gact === 'rename') {
         // 点重命名后才出现编辑框，且预填当前分组名
         card.querySelector('[data-view="btns"]').style.display = 'none';
+        var mv0 = card.querySelector('[data-view="move"]'); if (mv0) mv0.style.display = 'none';
         var ed = card.querySelector('[data-view="edit"]');
         ed.style.display = '';
         var inp = ed.querySelector('input'); if (inp) { inp.focus(); inp.select(); }
+        return;
+      }
+      if (btn.dataset.gact === 'move') {
+        card.querySelector('[data-view="btns"]').style.display = 'none';
+        var ed0 = card.querySelector('[data-view="edit"]'); if (ed0) ed0.style.display = 'none';
+        var mv = card.querySelector('[data-view="move"]');
+        if (mv) mv.style.display = '';
         return;
       }
       if (btn.dataset.gact === 'cancel') { renderGroups(); applyI18n(); return; }
@@ -508,6 +540,14 @@
         var res = Core.renameGroup(state, name, input ? input.value : '');
         if (!res.ok) { msg(out, res.error, false); return; }
         msg(out, t('已改名，同步更新了 {0} 个节点', res.updatedNodes), true);
+      } else if (btn.dataset.gact === 'save-move') {
+        var sel = card.querySelector('[data-field="move-target"]');
+        var target = sel ? sel.value : '';
+        var res3 = Core.moveGroupNodes(state, name, target);
+        if (!res3.ok) { msg(out, res3.error, false); return; }
+        var m3 = t('已移动 {0} 个节点到「{1}」', res3.moved, target);
+        if (res3.skipped) m3 += t('，{0} 个因重名留在原分组', res3.skipped);
+        msg(out, m3, true);
       } else if (btn.dataset.gact === 'del') {
         var r2 = Core.deleteGroup(state, name);
         if (!r2.ok) { msg(out, r2.error, false); return; }
@@ -567,11 +607,8 @@
       download('node-links.txt', allLinks().join('\n'), 'text/plain');
       msg($('export-msg'), '已生成链接清单', true);
     });
-    $('import-content-btn').addEventListener('click', function () {
-      var out = $('sub-msg');
-      var text = $('sub-content').value;
-      if (!text.trim()) { msg(out, '请先粘贴要导入的内容', false); return; }
-      var target = $('sub-content-group').value.trim() || Core.ALL_GROUP;
+    // 把订阅内容（base64 / 链接列表 / Clash YAML）解析成候选节点
+    function buildCandidates(text, target) {
       var res = Core.decodeSubContent(text);
       var cands = [], errs = [];
       if (res.yaml) {
@@ -589,9 +626,85 @@
           cands.push({ type: p.type, server: p.server, port: p.port, details: p.details, groupName: target, location: p.suggestedLocation || '' });
         });
       }
-      if (!cands.length) { msg(out, t('没有从内容里解析出任何节点'), false); return; }
+      return { cands: cands, errs: errs };
+    }
+    $('import-content-btn').addEventListener('click', function () {
+      var out = $('sub-msg');
+      var text = $('sub-content').value;
+      if (!text.trim()) { msg(out, '请先粘贴要导入的内容', false); return; }
+      var target = $('sub-content-group').value.trim() || Core.ALL_GROUP;
+      var built = buildCandidates(text, target);
+      if (!built.cands.length) { msg(out, t('没有从内容里解析出任何节点'), false); return; }
       $('sub-content').value = '';
-      importCandidates(cands, errs, out);
+      importCandidates(built.cands, built.errs, out);
+    });
+    // ------------------------------------------------ 解析订阅：拉取链接 → 勾选 → 添加
+    var subCandidates = [];
+    function renderSubCandidates() {
+      var box = $('sub-candidates');
+      if (!subCandidates.length) { box.innerHTML = ''; return; }
+      var rows = subCandidates.map(function (c, i) {
+        var nm = Core.buildNodeName({ groupName: c.groupName || Core.ALL_GROUP, location: c.location || t('未知'), server: c.server, port: c.port });
+        return '<label class="cand-row"><input type="checkbox" data-ci="' + i + '" checked><span class="cand-name">' + esc(nm) + '</span><span class="rule-badge">' + esc(c.type) + '</span></label>';
+      }).join('');
+      box.innerHTML = '<div class="card"><div class="card-head"><strong>' + esc(t('解析结果')) + '</strong><span id="cand-count"></span></div>' +
+        '<div class="row"><button id="cand-all-btn">全选</button><button id="cand-none-btn">全不选</button><button id="cand-add-btn" class="primary">添加选中节点</button></div>' +
+        '<div class="cand-list">' + rows + '</div></div>';
+      updateCandCount();
+    }
+    function updateCandCount() {
+      var el = $('cand-count'); if (!el) return;
+      var n = 0;
+      $('sub-candidates').querySelectorAll('input[type="checkbox"][data-ci]').forEach(function (b) { if (b.checked) n++; });
+      el.textContent = t('共 {0} 个节点，已选 {1} 个', subCandidates.length, n);
+    }
+    $('sub-candidates').addEventListener('change', function (e) {
+      if (e.target.matches('input[type="checkbox"][data-ci]')) updateCandCount();
+    });
+    $('sub-candidates').addEventListener('click', function (e) {
+      var btn = e.target.closest('button'); if (!btn) return;
+      var boxes = $('sub-candidates').querySelectorAll('input[type="checkbox"][data-ci]');
+      if (btn.id === 'cand-all-btn') { boxes.forEach(function (b) { b.checked = true; }); updateCandCount(); return; }
+      if (btn.id === 'cand-none-btn') { boxes.forEach(function (b) { b.checked = false; }); updateCandCount(); return; }
+      if (btn.id === 'cand-add-btn') {
+        var picked = [];
+        boxes.forEach(function (b) { if (b.checked) picked.push(subCandidates[Number(b.dataset.ci)]); });
+        if (!picked.length) { msg($('sub-msg'), t('请先勾选要添加的节点'), false); return; }
+        subCandidates = [];
+        renderSubCandidates();
+        importCandidates(picked, [], $('sub-msg'));
+      }
+    });
+    function fetchSubscription(url) {
+      var headers = { 'User-Agent': 'clash.meta' };
+      if (window.nativeFetch) return window.nativeFetch(url, headers);
+      return fetch(url, { headers: headers }).then(function (r) {
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.text();
+      });
+    }
+    $('parse-sub-btn').addEventListener('click', function () {
+      var out = $('sub-msg');
+      var text = $('sub-content').value;
+      if (!text.trim()) { msg(out, '请先粘贴要导入的内容', false); return; }
+      var target = $('sub-content-group').value.trim() || Core.ALL_GROUP;
+      function useContent(content) {
+        var built = buildCandidates(content, target);
+        if (!built.cands.length) { msg(out, t('没有从内容里解析出任何节点'), false); return; }
+        subCandidates = built.cands;
+        renderSubCandidates(); applyI18n($('sub-candidates'));
+        msg(out, t('已解析出 {0} 个节点，请勾选要添加的', built.cands.length), true);
+      }
+      // 整框就是一个订阅链接（可能被折行）时直接拉取；否则按粘贴的内容解析
+      var compact = text.replace(/\s+/g, '');
+      var url = null;
+      if (/^https?:\/\/\S+$/.test(compact)) url = compact;
+      else { var m = text.match(/https?:\/\/\S+/i); if (m) url = m[0]; }
+      if (!url) { useContent(text); return; }
+      msg(out, t('正在拉取订阅内容…'), true);
+      fetchSubscription(url).then(useContent).catch(function (e) {
+        msg(out, t('拉取订阅失败：{0}（也可以把订阅内容直接粘贴到上方框里导入）', (e && e.message) || 'network error'), false);
+      });
     });
     $('copy-yaml-btn').addEventListener('click', function () {
       renderYaml();
@@ -645,7 +758,7 @@
   }
 
   // ---------------------------------------------------------------- 更新检测
-  var APP_VERSION = '1.0.11';
+  var APP_VERSION = '1.0.12';
   var LATEST_API = 'https://api.github.com/repos/Vardven/node-yml-config-tool/releases/latest';
   var updateReleaseUrl = 'https://github.com/Vardven/node-yml-config-tool/releases/latest';
 
