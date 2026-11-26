@@ -448,11 +448,6 @@
       download('node-links.txt', allLinks().join('\n'), 'text/plain');
       msg($('export-msg'), '已生成链接清单', true);
     });
-    $('copy-subformat-btn').addEventListener('click', function () {
-      if (!state.nodes.length) { msg($('export-msg'), '还没有节点可导出', false); return; }
-      copyText(btoa(unescape(encodeURIComponent(allLinks().join('\n')))));
-      msg($('export-msg'), '订阅格式已复制（Base64）', true);
-    });
     $('import-content-btn').addEventListener('click', function () {
       var out = $('sub-msg');
       var text = $('sub-content').value;
