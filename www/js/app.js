@@ -13,12 +13,17 @@
       if (raw) {
         var s = JSON.parse(raw);
         if (s && Array.isArray(s.nodes) && Array.isArray(s.groups) && Array.isArray(s.subscriptions)) {
-          if (s.groups.indexOf('默认') === -1) s.groups.unshift('默认');
-          return s;
+          return migrateState(s);
         }
       }
     } catch (e) { /* 忽略损坏的本地数据 */ }
     return Core.emptyState();
+  }
+  function migrateState(s) {
+    // 旧版内置「默认」分组改为内置策略组「全部节点」
+    s.groups = (s.groups || []).filter(function (g) { return g !== '默认' && g !== Core.ALL_GROUP; });
+    s.nodes.forEach(function (n) { if (n.groupName === '默认') n.groupName = Core.ALL_GROUP; });
+    return s;
   }
   function save() { localStorage.setItem(KEY, JSON.stringify(state)); }
   function $(id) { return document.getElementById(id); }
@@ -67,8 +72,17 @@
   }
 
   // ---------------------------------------------------------------- 分组
+  var openPolicy = {};
   function renderGroups() {
-    var groups = Core.listGroups(state);
+    $('policy-list').innerHTML = Core.POLICY_GROUPS.map(function (pg) {
+      var members = Core.policyGroupMembers(state, pg.name);
+      var open = !!openPolicy[pg.name];
+      return '<div class="card"><div class="card-head"><strong>' + esc(pg.name) + '</strong><span>' + esc(t('{0} 个节点', members.length)) + '</span></div>' +
+        '<div class="row"><button data-pact="view" data-name="' + esc(pg.name) + '">' + (open ? '收起' : '查看节点') + '</button></div>' +
+        (open ? '<div class="member-list">' + (members.length ? members.map(function (n) { return '<div class="member-item">' + esc(Core.buildNodeName(n)) + '</div>'; }).join('') : '<div class="hint">暂无节点</div>') + '</div>' : '') +
+        '</div>';
+    }).join('');
+    var groups = Core.listGroups(state).filter(function (g) { return g.custom; });
     $('group-empty').style.display = groups.length ? 'none' : 'block';
     $('group-list').innerHTML = groups.map(function (g) {
       return '<div class="card"><div class="card-head"><strong>' + esc(g.name) + '</strong><span>' + esc(t('{0} 个节点', g.count)) + '</span></div>' +
@@ -102,7 +116,7 @@
     } else if (name) {
       sel.value = '__new__'; input.style.display = ''; input.value = name;
     } else {
-      sel.value = names.indexOf('默认') !== -1 ? '默认' : (names[0] || '__new__');
+      sel.value = names.indexOf(Core.ALL_GROUP) !== -1 ? Core.ALL_GROUP : (names[0] || '__new__');
       input.style.display = sel.value === '__new__' ? '' : 'none';
       if (sel.value !== '__new__') input.value = '';
     }
@@ -113,7 +127,7 @@
     $('f-group-select').innerHTML = names.map(function (n) {
       return '<option value="' + esc(n) + '">' + esc(n) + '</option>';
     }).join('') + '<option value="__new__">＋ 新建分组…</option>';
-    setGroupValue(cur || '默认');
+    setGroupValue(cur || Core.ALL_GROUP);
   }
 
   // ---------------------------------------------------------------- 订阅
@@ -190,7 +204,7 @@
 
   function fillForm(n) {
     var d = n.details || {};
-    setGroupValue(n.groupName || '默认');
+    setGroupValue(n.groupName || Core.ALL_GROUP);
     $('f-location').value = n.location || '';
     $('f-server').value = n.server || '';
     $('f-port').value = n.port || '';
@@ -224,7 +238,7 @@
   function importCandidates(cands, parseErrs, out) {
     var added = 0, skipped = (parseErrs || []).slice();
     cands.forEach(function (c) {
-      var res = Core.addNode(state, { groupName: c.groupName || '默认', location: c.location || t('未知'), type: c.type, server: c.server, port: c.port, details: c.details });
+      var res = Core.addNode(state, { groupName: c.groupName || Core.ALL_GROUP, location: c.location || t('未知'), type: c.type, server: c.server, port: c.port, details: c.details });
       if (res.ok) added++; else skipped.push(res.error);
     });
     save(); renderAll();
@@ -243,7 +257,7 @@
     // 多条链接（一行一条）→ 批量直接导入
     var linkLines = lines.filter(function (l) { return l.indexOf('://') !== -1; });
     if (linkLines.length >= 2) {
-      var bgroup = getGroupValue() || '默认';
+      var bgroup = getGroupValue() || Core.ALL_GROUP;
       var bcands = [], berrs = [];
       linkLines.forEach(function (line) {
         var p = Core.parseShareLink(line);
@@ -257,8 +271,8 @@
     }
     var r = Core.parseShareLink(first);
     if (!r.ok) { msg(out, r.error, false); return; }
-    fillForm({ groupName: '默认', location: r.suggestedLocation || '', server: r.server, port: r.port, type: r.type, details: r.details });
-    msg(out, t('已解析：{0} / {1}:{2}。{3} 已默认放入「默认」分组，请确认后保存。', r.type, r.server, r.port, r.locationNote || ''), true);
+    fillForm({ groupName: Core.ALL_GROUP, location: r.suggestedLocation || '', server: r.server, port: r.port, type: r.type, details: r.details });
+    msg(out, t('已解析：{0} / {1}:{2}。{3} 已默认放入「全部节点」分组，请确认后保存。', r.type, r.server, r.port, r.locationNote || ''), true);
   }
 
   function onSaveNode() {
@@ -362,6 +376,12 @@
       msg(out, '分组已创建', true);
       save(); renderAll();
     });
+    $('policy-list').addEventListener('click', function (e) {
+      var btn = e.target.closest('button'); if (!btn) return;
+      var name = btn.dataset.name;
+      openPolicy[name] = !openPolicy[name];
+      renderGroups(); applyI18n();
+    });
     $('group-list').addEventListener('click', function (e) {
       var btn = e.target.closest('button'); if (!btn) return;
       var name = btn.dataset.name;
@@ -452,7 +472,7 @@
       var out = $('sub-msg');
       var text = $('sub-content').value;
       if (!text.trim()) { msg(out, '请先粘贴要导入的内容', false); return; }
-      var target = $('sub-content-group').value.trim() || '默认';
+      var target = $('sub-content-group').value.trim() || Core.ALL_GROUP;
       var res = Core.decodeSubContent(text);
       var cands = [], errs = [];
       if (res.yaml) {
@@ -495,8 +515,7 @@
         try {
           var s = JSON.parse(reader.result);
           if (!s || !Array.isArray(s.nodes) || !Array.isArray(s.groups) || !Array.isArray(s.subscriptions)) throw new Error(t('格式不对'));
-          if (s.groups.indexOf('默认') === -1) s.groups.unshift('默认');
-          state = s; save(); renderAll();
+          state = migrateState(s); save(); renderAll();
           msg($('export-msg'), '备份已导入', true);
         } catch (err) { msg($('export-msg'), t('导入失败：{0}', err.message), false); }
       };
@@ -527,7 +546,7 @@
   }
 
   // ---------------------------------------------------------------- 更新检测
-  var APP_VERSION = '1.0.4';
+  var APP_VERSION = '1.0.5';
   var LATEST_API = 'https://api.github.com/repos/Vardven/node-yml-config-tool/releases/latest';
   var updateReleaseUrl = 'https://github.com/Vardven/node-yml-config-tool/releases/latest';
 
@@ -591,6 +610,7 @@
     setTimeout(function () { URL.revokeObjectURL(a.href); }, 1000);
   }
 
+  save(); // 落盘一次，确保旧数据迁移（默认 -> 全部节点）立即生效
   bind();
   renderAll();
   checkForUpdates(false);
