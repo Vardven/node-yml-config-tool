@@ -181,13 +181,16 @@
       }).join('');
       var nameInput = r.builtin ? '' :
         '<input class="rule-name-input" data-idx="' + i + '" value="' + esc(r.name || '') + '" placeholder="' + esc(t('规则名称（可选）')) + '">';
+      var targetHtml = r.builtin
+        ? '<span class="rule-target-text">' + esc(r.target) + '</span>'
+        : '<select class="rule-target-sel" data-idx="' + i + '">' + opts + '</select>';
       var acts = r.builtin
         ? '<span class="rule-badge">' + esc(t('默认')) + '</span>'
         : '<button data-ract="up" data-idx="' + i + '"' + (i === 0 ? ' disabled' : '') + '>↑</button>' +
           '<button data-ract="down" data-idx="' + i + '"' + (i === state.rules.length - 1 ? ' disabled' : '') + '>↓</button>' +
           '<button data-ract="del" data-idx="' + i + '">' + esc(t('删除')) + '</button>';
       return '<div class="rule-row">' + nameInput + '<span class="rule-text">' + esc(ruleText(r)) + '</span>' +
-        '<select class="rule-target-sel" data-idx="' + i + '">' + opts + '</select>' + acts + '</div>';
+        targetHtml + acts + '</div>';
     }).join('');
     $('rule-provider').innerHTML = Core.RULE_PROVIDERS.map(function (p) { return '<option value="' + esc(p) + '">' + esc(p) + '</option>'; }).join('');
     var cur = $('rule-target').value;
