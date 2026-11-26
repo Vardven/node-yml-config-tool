@@ -1,4 +1,4 @@
-# 节点 YML 配置工具（node-yml-config-tool）
+# Clash YML 配置工具（node-yml-config-tool）
 
 一个管理 Clash / mihomo 节点配置的小工具：把零散的节点分享链接和订阅链接整理好，一键生成完整的 YML 配置文件。同一份网页代码可以：
 
