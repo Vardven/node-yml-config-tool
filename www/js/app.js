@@ -294,6 +294,7 @@
       btn.addEventListener('click', function () {
         document.querySelectorAll('.tab-btn').forEach(function (b) { b.classList.remove('active'); });
         document.querySelectorAll('.tab-page').forEach(function (p) { p.classList.remove('active'); });
+        document.body.classList.remove('settings-open');
         $('settings-btn').classList.remove('active');
         btn.classList.add('active');
         $('tab-' + btn.dataset.tab).classList.add('active');
@@ -301,9 +302,14 @@
       });
     });
     // 右上角「设置」按钮：打开设置页（关于内容在设置页里）
+    $('settings-back').addEventListener('click', function () {
+      document.body.classList.remove('settings-open');
+      document.querySelector('[data-tab="nodes"]').click();
+    });
     $('settings-btn').addEventListener('click', function () {
       document.querySelectorAll('.tab-btn').forEach(function (b) { b.classList.remove('active'); });
       document.querySelectorAll('.tab-page').forEach(function (p) { p.classList.remove('active'); });
+      document.body.classList.add('settings-open');
       $('settings-btn').classList.add('active');
       $('tab-about').classList.add('active');
     });
@@ -526,7 +532,7 @@
   }
 
   // ---------------------------------------------------------------- 更新检测
-  var APP_VERSION = '1.0.3';
+  var APP_VERSION = '1.0.4';
   var LATEST_API = 'https://api.github.com/repos/Vardven/node-yml-config-tool/releases/latest';
   var updateReleaseUrl = 'https://github.com/Vardven/node-yml-config-tool/releases/latest';
 
