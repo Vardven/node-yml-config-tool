@@ -256,10 +256,18 @@
       btn.addEventListener('click', function () {
         document.querySelectorAll('.tab-btn').forEach(function (b) { b.classList.remove('active'); });
         document.querySelectorAll('.tab-page').forEach(function (p) { p.classList.remove('active'); });
+        $('settings-btn').classList.remove('active');
         btn.classList.add('active');
         $('tab-' + btn.dataset.tab).classList.add('active');
         if (btn.dataset.tab === 'export') renderYaml();
       });
+    });
+    // 右上角「设置」按钮：打开设置页（关于内容在设置页里）
+    $('settings-btn').addEventListener('click', function () {
+      document.querySelectorAll('.tab-btn').forEach(function (b) { b.classList.remove('active'); });
+      document.querySelectorAll('.tab-page').forEach(function (p) { p.classList.remove('active'); });
+      $('settings-btn').classList.add('active');
+      $('tab-about').classList.add('active');
     });
 
     $('node-search').addEventListener('input', renderNodes);
@@ -418,7 +426,7 @@
   }
 
   // ---------------------------------------------------------------- 更新检测
-  var APP_VERSION = '1.0.1';
+  var APP_VERSION = '1.0.2';
   var LATEST_API = 'https://api.github.com/repos/Vardven/node-yml-config-tool/releases/latest';
   var updateReleaseUrl = 'https://github.com/Vardven/node-yml-config-tool/releases/latest';
 
