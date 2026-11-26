@@ -119,12 +119,14 @@
     </div>
     <div class="row"><button id="add-sub-btn" class="primary">添加订阅</button></div>
     <h3>导入订阅内容</h3>
-    <label>把订阅返回的 base64 内容粘贴到这里，会自动解码并解析成单个节点导入；也支持一行一条的链接列表、Clash 配置 YAML</label>
+    <label>把订阅返回的 base64 内容粘贴到这里，会自动解码并解析成单个节点导入；也可以粘贴订阅链接，点「解析订阅」拉取订阅里的节点来挑选</label>
     <textarea id="sub-content" rows="6" placeholder="粘贴订阅内容…"></textarea>
     <div class="row">
       <input id="sub-content-group" placeholder="导入到分组，留空用「全部节点」">
       <button id="import-content-btn" class="primary">导入为节点</button>
+      <button id="parse-sub-btn">解析订阅</button>
     </div>
+    <div id="sub-candidates"></div>
     <p id="sub-msg" class="msg"></p>
     <div id="sub-empty" class="empty">还没有任何订阅。添加你自己的订阅链接后，导出配置时会自动生成 proxy-providers 段。</div>
     <div id="sub-list"></div>
@@ -196,7 +198,7 @@
     </div>
     <div class="card">
       <h3>检查更新</h3>
-      <p>当前版本：<span id="app-version">v1.0.11</span></p>
+      <p>当前版本：<span id="app-version">v1.0.12</span></p>
       <div class="row">
         <button id="check-update-btn">检查更新</button>
       </div>
