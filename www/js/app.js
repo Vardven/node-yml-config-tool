@@ -23,6 +23,7 @@
     // 旧版内置「默认」分组改为内置策略组「全部节点」
     s.groups = (s.groups || []).filter(function (g) { return g !== '默认' && g !== Core.ALL_GROUP; });
     s.nodes.forEach(function (n) { if (n.groupName === '默认') n.groupName = Core.ALL_GROUP; });
+    if (!Array.isArray(s.rules)) s.rules = Core.defaultRules();
     return s;
   }
   function save() { localStorage.setItem(KEY, JSON.stringify(state)); }
@@ -156,7 +157,37 @@
     }).join('');
   }
 
-  function renderAll() { renderNodes(); renderGroups(); renderSubs(); renderYaml(); applyI18n(); }
+  // ------------------------------------------------------------ 分流规则页
+  function ruleText(r) {
+    if (r.type === 'MATCH') return 'MATCH';
+    return r.type + ',' + r.payload + (r.noResolve ? ' · no-resolve' : '');
+  }
+  function renderRules() {
+    var targets = Core.ruleTargets(state);
+    var box = $('rule-list');
+    box.innerHTML = state.rules.map(function (r, i) {
+      var opts = targets.map(function (tg) {
+        return '<option value="' + esc(tg) + '"' + (tg === r.target ? ' selected' : '') + '>' + esc(tg) + '</option>';
+      }).join('');
+      return '<div class="rule-row"><span class="rule-text">' + esc(ruleText(r)) + '</span>' +
+        '<select class="rule-target-sel" data-idx="' + i + '">' + opts + '</select>' +
+        '<button data-ract="up" data-idx="' + i + '"' + (i === 0 ? ' disabled' : '') + '>↑</button>' +
+        '<button data-ract="down" data-idx="' + i + '"' + (i === state.rules.length - 1 ? ' disabled' : '') + '>↓</button>' +
+        '<button data-ract="del" data-idx="' + i + '">' + esc(t('删除')) + '</button></div>';
+    }).join('');
+    $('rule-provider').innerHTML = Core.RULE_PROVIDERS.map(function (p) { return '<option value="' + esc(p) + '">' + esc(p) + '</option>'; }).join('');
+    var cur = $('rule-target').value;
+    $('rule-target').innerHTML = targets.map(function (tg) { return '<option value="' + esc(tg) + '">' + esc(tg) + '</option>'; }).join('');
+    if (cur && targets.indexOf(cur) !== -1) $('rule-target').value = cur;
+    applyI18n(box);
+  }
+  function syncRuleType() {
+    var ty = $('rule-type').value;
+    $('rule-provider-row').style.display = ty === 'RULE-SET' ? '' : 'none';
+    $('rule-payload-row').style.display = (ty === 'RULE-SET' || ty === 'MATCH') ? 'none' : '';
+  }
+
+  function renderAll() { renderNodes(); renderGroups(); renderSubs(); renderRules(); renderYaml(); applyI18n(); }
   function renderYaml() { $('yaml-out').value = Core.generateFullYaml(state); }
 
   // ---------------------------------------------------------------- 添加/编辑节点
@@ -328,6 +359,36 @@
       $('tab-about').classList.add('active');
     });
 
+    $('rule-list').addEventListener('change', function (e) {
+      var sel = e.target.closest('.rule-target-sel'); if (!sel) return;
+      state.rules[Number(sel.dataset.idx)].target = sel.value;
+      save();
+    });
+    $('rule-list').addEventListener('click', function (e) {
+      var btn = e.target.closest('button'); if (!btn) return;
+      var i = Number(btn.dataset.idx);
+      if (btn.dataset.ract === 'del') state.rules.splice(i, 1);
+      else if (btn.dataset.ract === 'up' && i > 0) { var t1 = state.rules[i - 1]; state.rules[i - 1] = state.rules[i]; state.rules[i] = t1; }
+      else if (btn.dataset.ract === 'down' && i < state.rules.length - 1) { var t2 = state.rules[i + 1]; state.rules[i + 1] = state.rules[i]; state.rules[i] = t2; }
+      else return;
+      save(); renderRules(); applyI18n();
+    });
+    $('rule-type').addEventListener('change', syncRuleType);
+    $('add-rule-btn').addEventListener('click', function () {
+      var ty = $('rule-type').value;
+      var payload = ty === 'RULE-SET' ? $('rule-provider').value : $('rule-payload').value.trim();
+      if (ty !== 'MATCH' && !payload) { msg($('rule-msg'), t('请输入规则值'), false); return; }
+      state.rules.push({ type: ty, payload: ty === 'MATCH' ? '' : payload, target: $('rule-target').value, noResolve: $('rule-noresolve').checked && ty !== 'MATCH' });
+      $('rule-payload').value = '';
+      save(); renderRules(); applyI18n();
+      msg($('rule-msg'), t('规则已添加'), true);
+    });
+    $('reset-rules-btn').addEventListener('click', function () {
+      if (!window.confirm(t('确定要恢复默认分流规则吗？'))) return;
+      state.rules = Core.defaultRules();
+      save(); renderRules(); applyI18n();
+      msg($('rule-msg'), t('已恢复默认规则'), true);
+    });
     $('node-search').addEventListener('input', renderNodes);
     $('node-group-filter').addEventListener('change', renderNodes);
     $('node-type-filter').addEventListener('change', renderNodes);
@@ -546,7 +607,7 @@
   }
 
   // ---------------------------------------------------------------- 更新检测
-  var APP_VERSION = '1.0.6';
+  var APP_VERSION = '1.0.7';
   var LATEST_API = 'https://api.github.com/repos/Vardven/node-yml-config-tool/releases/latest';
   var updateReleaseUrl = 'https://github.com/Vardven/node-yml-config-tool/releases/latest';
 
@@ -612,6 +673,7 @@
 
   save(); // 落盘一次，确保旧数据迁移（默认 -> 全部节点）立即生效
   bind();
+  syncRuleType();
   renderAll();
   checkForUpdates(false);
 })();
