@@ -151,11 +151,40 @@
     var typeMap = { vless: 'vless', trojan: 'trojan', hysteria2: 'hysteria2', hy2: 'hysteria2', tuic: 'tuic', anytls: 'anytls' };
     var type = typeMap[scheme];
     if (!type) return { ok: false, error: '暂不支持的协议：' + scheme };
-    var u = new URL(link);
-    var q = u.searchParams;
-    var cred = decodeURIComponent(u.username || '');
+    // 不依赖 new URL()：部分浏览器/桌面壳（旧版 Chromium 等）对 vless/tuic/anytls 这类
+    // 非标准协议只解析出 query 参数，hostname/port/userinfo 一律返回空、端口回落 443。
+    // 这里按 scheme://userinfo@host:port?query#remark 结构全部手动拆解，任何环境结果一致。
+    function safeDecode(s) { try { return decodeURIComponent(s); } catch (e) { return s; } }
+    var rest = link.slice(link.indexOf('://') + 3);
+    var remark = '';
+    var hashIdx = rest.indexOf('#');
+    if (hashIdx !== -1) { remark = safeDecode(rest.slice(hashIdx + 1)); rest = rest.slice(0, hashIdx); }
+    var queryStr = '';
+    var qIdx = rest.indexOf('?');
+    if (qIdx !== -1) { queryStr = rest.slice(qIdx + 1); rest = rest.slice(0, qIdx); }
+    var slashIdx = rest.indexOf('/');
+    if (slashIdx !== -1) rest = rest.slice(0, slashIdx);
+    var q = new URLSearchParams(queryStr);
+    var userinfo = '';
+    var hostport = rest;
+    var atIdx = rest.lastIndexOf('@');
+    if (atIdx !== -1) { userinfo = rest.slice(0, atIdx); hostport = rest.slice(atIdx + 1); }
+    var host = '', port = NaN;
+    if (hostport.charAt(0) === '[') {
+      var rb = hostport.indexOf(']');
+      host = hostport.slice(1, rb);
+      var tail = hostport.slice(rb + 1);
+      if (tail.charAt(0) === ':') port = parseInt(tail.slice(1), 10);
+    } else {
+      var cIdx = hostport.lastIndexOf(':');
+      if (cIdx !== -1 && /^\d+$/.test(hostport.slice(cIdx + 1))) { host = hostport.slice(0, cIdx); port = parseInt(hostport.slice(cIdx + 1), 10); }
+      else host = hostport;
+    }
+    host = host.toLowerCase();
+    var cred = safeDecode(userinfo);
     var urlPw = '';
-    try { urlPw = decodeURIComponent(u.password || ''); } catch (e) { urlPw = u.password || ''; }
+    var rawColon = userinfo.indexOf(':');
+    if (rawColon !== -1) { cred = safeDecode(userinfo.slice(0, rawColon)); urlPw = safeDecode(userinfo.slice(rawColon + 1)); }
     var details = {};
     if (type === 'vless') details.uuid = cred;
     else if (type === 'tuic') {
@@ -215,10 +244,10 @@
 
     return finishParse({
       type: type,
-      server: u.hostname,
-      port: parseInt(u.port, 10) || 443,
+      server: host,
+      port: port || 443,
       details: details,
-      remark: decodeURIComponent(u.hash ? u.hash.slice(1) : '')
+      remark: remark
     });
   }
 
