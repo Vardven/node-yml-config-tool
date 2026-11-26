@@ -1,5 +1,5 @@
 /*
- * core.js — 节点 YML 配置工具的核心逻辑（无 DOM 依赖，可在浏览器和 Node 中运行）
+ * core.js — Clash YML 配置工具的核心逻辑（无 DOM 依赖，可在浏览器和 Node 中运行）
  * 包含：分享链接解析、国家检测、节点命名、分组/订阅的纯数据操作、YAML 生成。
  * 初始状态不含任何预置节点或订阅，仅有一个空的「默认」分组。
  */
@@ -470,7 +470,7 @@
   function generateFullYaml(state) {
     var subs = state.subscriptions || [];
     var out = [];
-    out.push('# 由「节点 YML 配置工具」生成 —— Clash / mihomo 配置');
+    out.push('# 由「Clash YML 配置工具」生成 —— Clash / mihomo 配置');
     out.push('# 节点、分组与订阅都由使用者自行添加，工具本身不含任何预置数据。');
     out.push('');
 
