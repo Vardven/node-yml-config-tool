@@ -24,6 +24,16 @@
     s.groups = (s.groups || []).filter(function (g) { return g !== '默认' && g !== Core.ALL_GROUP; });
     s.nodes.forEach(function (n) { if (n.groupName === '默认') n.groupName = Core.ALL_GROUP; });
     if (!Array.isArray(s.rules)) s.rules = Core.defaultRules();
+    // v1.0.7 及更早的规则没有 builtin 标记：按类型+值匹配默认规则补上（默认规则锁定顺序与删除）
+    var defs = Core.defaultRules();
+    var usedDef = {};
+    s.rules.forEach(function (r) {
+      if (r.builtin !== undefined) return;
+      var key = r.type + '|' + (r.payload || '');
+      var hit = -1;
+      defs.forEach(function (d, ix) { if (hit === -1 && !usedDef[ix] && (d.type + '|' + (d.payload || '')) === key) hit = ix; });
+      if (hit !== -1) { usedDef[hit] = true; r.builtin = true; } else { r.builtin = false; }
+    });
     return s;
   }
   function save() { localStorage.setItem(KEY, JSON.stringify(state)); }
@@ -169,11 +179,13 @@
       var opts = targets.map(function (tg) {
         return '<option value="' + esc(tg) + '"' + (tg === r.target ? ' selected' : '') + '>' + esc(tg) + '</option>';
       }).join('');
+      var acts = r.builtin
+        ? '<span class="rule-badge">' + esc(t('默认')) + '</span>'
+        : '<button data-ract="up" data-idx="' + i + '"' + (i === 0 ? ' disabled' : '') + '>↑</button>' +
+          '<button data-ract="down" data-idx="' + i + '"' + (i === state.rules.length - 1 ? ' disabled' : '') + '>↓</button>' +
+          '<button data-ract="del" data-idx="' + i + '">' + esc(t('删除')) + '</button>';
       return '<div class="rule-row"><span class="rule-text">' + esc(ruleText(r)) + '</span>' +
-        '<select class="rule-target-sel" data-idx="' + i + '">' + opts + '</select>' +
-        '<button data-ract="up" data-idx="' + i + '"' + (i === 0 ? ' disabled' : '') + '>↑</button>' +
-        '<button data-ract="down" data-idx="' + i + '"' + (i === state.rules.length - 1 ? ' disabled' : '') + '>↓</button>' +
-        '<button data-ract="del" data-idx="' + i + '">' + esc(t('删除')) + '</button></div>';
+        '<select class="rule-target-sel" data-idx="' + i + '">' + opts + '</select>' + acts + '</div>';
     }).join('');
     $('rule-provider').innerHTML = Core.RULE_PROVIDERS.map(function (p) { return '<option value="' + esc(p) + '">' + esc(p) + '</option>'; }).join('');
     var cur = $('rule-target').value;
@@ -378,7 +390,7 @@
       var ty = $('rule-type').value;
       var payload = ty === 'RULE-SET' ? $('rule-provider').value : $('rule-payload').value.trim();
       if (ty !== 'MATCH' && !payload) { msg($('rule-msg'), t('请输入规则值'), false); return; }
-      state.rules.push({ type: ty, payload: ty === 'MATCH' ? '' : payload, target: $('rule-target').value, noResolve: $('rule-noresolve').checked && ty !== 'MATCH' });
+      state.rules.push({ type: ty, payload: ty === 'MATCH' ? '' : payload, target: $('rule-target').value, noResolve: $('rule-noresolve').checked && ty !== 'MATCH', builtin: false });
       $('rule-payload').value = '';
       save(); renderRules(); applyI18n();
       msg($('rule-msg'), t('规则已添加'), true);
@@ -607,7 +619,7 @@
   }
 
   // ---------------------------------------------------------------- 更新检测
-  var APP_VERSION = '1.0.7';
+  var APP_VERSION = '1.0.8';
   var LATEST_API = 'https://api.github.com/repos/Vardven/node-yml-config-tool/releases/latest';
   var updateReleaseUrl = 'https://github.com/Vardven/node-yml-config-tool/releases/latest';
 
