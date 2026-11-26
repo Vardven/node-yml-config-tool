@@ -524,14 +524,6 @@
       msg(out, t('已添加订阅：{0}', res.sub.name), true);
       save(); renderAll();
     });
-    $('bulk-sub-btn').addEventListener('click', function () {
-      var res = Core.parseBulkSubscriptions(state, $('sub-bulk').value);
-      var out = $('sub-msg');
-      var text = t('批量添加完成：成功 {0} 条', res.added.length);
-      if (res.skipped.length) text += t('，跳过 {0} 条（{1}）', res.skipped.length, res.skipped.map(function (s) { return s.reason; }).join(t('；')));
-      msg(out, text, res.added.length > 0);
-      save(); renderAll();
-    });
     $('sub-list').addEventListener('click', function (e) {
       var btn = e.target.closest('button'); if (!btn) return;
       var sub = state.subscriptions.find(function (s) { return s.id === btn.dataset.id; });
@@ -653,7 +645,7 @@
   }
 
   // ---------------------------------------------------------------- 更新检测
-  var APP_VERSION = '1.0.10';
+  var APP_VERSION = '1.0.11';
   var LATEST_API = 'https://api.github.com/repos/Vardven/node-yml-config-tool/releases/latest';
   var updateReleaseUrl = 'https://github.com/Vardven/node-yml-config-tool/releases/latest';
 
