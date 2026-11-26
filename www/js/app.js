@@ -23,16 +23,43 @@
     // 旧版内置「默认」分组改为内置策略组「全部节点」
     s.groups = (s.groups || []).filter(function (g) { return g !== '默认' && g !== Core.ALL_GROUP; });
     s.nodes.forEach(function (n) { if (n.groupName === '默认') n.groupName = Core.ALL_GROUP; });
-    if (!Array.isArray(s.rules)) s.rules = Core.defaultRules();
-    // v1.0.7 及更早的规则没有 builtin 标记：按类型+值匹配默认规则补上（默认规则锁定顺序与删除）
-    var defs = Core.defaultRules();
-    var usedDef = {};
+    if (!Array.isArray(s.rules)) { s.rules = Core.defaultRules(); return s; }
+    // 内置（默认）规则完全锁定：每次加载都按类型+值与出厂默认对齐——
+    // 目标/no-resolve 被旧版本改过的强制改回（如 cn_ip 被改成香港节点组），缺失的默认规则按规范位置补回；
+    // 用户自加规则（匹配不上默认签名的）原样保留，位置与名称不动。
+    // 已退役的默认规则签名改名映射：ai_domain（≤v1.0.9 的写法）-> ai_ip
+    var RETIRED = { 'RULE-SET|ai_domain': 'ai_ip' };
     s.rules.forEach(function (r) {
-      if (r.builtin !== undefined) return;
+      var k = r.type + '|' + (r.payload || '');
+      if (RETIRED[k]) r.payload = RETIRED[k];
+    });
+    var defs = Core.defaultRules();
+    var canonIdx = {};
+    defs.forEach(function (d, ix) { canonIdx[d.type + '|' + (d.payload || '')] = ix; });
+    var present = {};
+    s.rules.forEach(function (r) {
       var key = r.type + '|' + (r.payload || '');
-      var hit = -1;
-      defs.forEach(function (d, ix) { if (hit === -1 && !usedDef[ix] && (d.type + '|' + (d.payload || '')) === key) hit = ix; });
-      if (hit !== -1) { usedDef[hit] = true; r.builtin = true; } else { r.builtin = false; }
+      if (canonIdx[key] !== undefined && !present[key]) {
+        var d = defs[canonIdx[key]];
+        r.target = d.target;
+        if (d.noResolve) r.noResolve = true; else delete r.noResolve;
+        r.builtin = true;
+        present[key] = true;
+      } else {
+        r.builtin = false;
+      }
+    });
+    defs.forEach(function (d, ix) {
+      var key = d.type + '|' + (d.payload || '');
+      if (present[key]) return;
+      var pos = s.rules.length;
+      for (var i = 0; i < s.rules.length; i++) {
+        var k2 = s.rules[i].type + '|' + (s.rules[i].payload || '');
+        if (s.rules[i].builtin && canonIdx[k2] !== undefined && canonIdx[k2] > ix) { pos = i; break; }
+      }
+      var copy = {}; Object.keys(d).forEach(function (k) { copy[k] = d[k]; });
+      s.rules.splice(pos, 0, copy);
+      present[key] = true;
     });
     return s;
   }
@@ -626,7 +653,7 @@
   }
 
   // ---------------------------------------------------------------- 更新检测
-  var APP_VERSION = '1.0.9';
+  var APP_VERSION = '1.0.10';
   var LATEST_API = 'https://api.github.com/repos/Vardven/node-yml-config-tool/releases/latest';
   var updateReleaseUrl = 'https://github.com/Vardven/node-yml-config-tool/releases/latest';
 
