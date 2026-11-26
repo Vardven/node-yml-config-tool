@@ -47,3 +47,5 @@ a.btn-link.primary { background: #2563eb; color: #fff; border-color: #2563eb; }
 .rule-text { flex: 1; min-width: 180px; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 13px; word-break: break-all; }
 .rule-row select { max-width: 220px; }
 .rule-row button { padding: 4px 10px; }
+
+.rule-badge { font-size: 12px; color: #6b7280; border: 1px solid #d1d5db; border-radius: 999px; padding: 2px 10px; }
