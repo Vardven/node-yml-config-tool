@@ -424,19 +424,21 @@
     { name: '🧿其它地区', filter: '(?i)^(?!.*(?:港|hk|hongkong|台|tw|taiwan|日|jp|japan|新加坡|sg|singapore|美|us|unitedstates|英国|gb|great britain|德国|de|germany|kr|korea|首尔|韩|韓)).*' }
   ];
   // ------------------------------------------------------------ 分流规则（可自定义）
-  var RULE_PROVIDERS = ['private_domain', 'apple_domain', 'ai_domain', 'bilibili_domain', 'spotify_domain',
-    'youtube_domain', 'google_domain', 'onedrive_domain', 'microsoft_domain', 'tiktok_domain',
+  var RULE_PROVIDERS = ['private_domain', 'apple_domain', 'ai_ip', 'bilibili_domain', 'spotify_domain',
+    'bahamut_domain', 'youtube_domain', 'google_domain', 'onedrive_domain', 'microsoft_domain', 'tiktok_domain',
     'telegram_domain', 'netflix_domain', 'notion_domain', 'paypal_domain', 'geolocation-!cn', 'cn_domain',
     'google_ip', 'netflix_ip', 'telegram_ip', 'cn_ip'];
   var SERVICE_GROUPS = ['📹 YouTube', '🍀 Google', '🤖 AI', '📲 Telegram', '🎥 NETFLIX', '🎵 Spotify',
-    '🎵 TikTok', '🪟 Microsoft', '🐬 OneDrive', '📖 Notion', '💶 PayPal', '📹 哔哩哔哩', '🍎 Apple',
+    '🎵 TikTok', '🪟 Microsoft', '🐬 OneDrive', '📖 Notion', '💶 PayPal', '📹 哔哩哔哩', '📹 巴哈姆特', '🍎 Apple',
     '🎯 全球直连', '🐟 漏网之鱼'];
   function defaultRules() {
     return [
+      { type: 'RULE-SET', payload: 'private_domain', target: '🎯 全球直连' },
       { type: 'RULE-SET', payload: 'apple_domain', target: '🍎 Apple' },
-      { type: 'RULE-SET', payload: 'ai_domain', target: '🤖 AI' },
+      { type: 'RULE-SET', payload: 'ai_ip', target: '🤖 AI' },
       { type: 'RULE-SET', payload: 'bilibili_domain', target: '📹 哔哩哔哩' },
       { type: 'RULE-SET', payload: 'spotify_domain', target: '🎵 Spotify' },
+      { type: 'RULE-SET', payload: 'bahamut_domain', target: '📹 巴哈姆特' },
       { type: 'RULE-SET', payload: 'youtube_domain', target: '📹 YouTube' },
       { type: 'RULE-SET', payload: 'google_domain', target: '🍀 Google' },
       { type: 'RULE-SET', payload: 'onedrive_domain', target: '🐬 OneDrive' },
@@ -725,9 +727,10 @@
     customGroups.forEach(function (g) {
       out.push('  - {name: ' + g + ', type: select, include-all: true, filter: "^' + escapeRegExp(g) + '\\\\|"}');
     });
-    ['📹 YouTube', '🍀 Google', '🤖 AI', '📲 Telegram', '🎥 NETFLIX', '🎵 Spotify', '🎵 TikTok', '🪟 Microsoft', '🐬 OneDrive', '📖 Notion', '💶 PayPal', '📹 哔哩哔哩'].forEach(function (name) {
+    ['📹 YouTube', '🍀 Google', '🤖 AI', '📲 Telegram', '🎥 NETFLIX', '🎵 Spotify', '🎵 TikTok', '🪟 Microsoft', '🐬 OneDrive', '📖 Notion', '💶 PayPal', '📹 巴哈姆特'].forEach(function (name) {
       out.push('  - {name: ' + name + ', <<: *pr}');
     });
+    out.push('  - {name: 📹 哔哩哔哩, type: select, proxies: [DIRECT, 🚀 节点选择, ☢ 负载均衡-散列, ☢ 负载均衡-轮询, ♻️ 自动选择, 🇭🇰香港节点, 🇨🇳台湾节点, 🇯🇵日本节点, 🇸🇬新加坡节点, 🇰🇷韩国节点, 🇺🇲美国节点, 🇩🇪德国节点, 🇬🇧英国节点, 🧿其它地区, 🌐 全部节点]}');
     out.push('  - {name: 🍎 Apple, type: select, proxies: [DIRECT, 🚀 节点选择, ♻️ 自动选择, 🌐 全部节点]}');
     out.push('  - {name: 🎯 全球直连, type: select, proxies: [DIRECT, 🚀 节点选择]}');
     out.push('  - {name: 🐟 漏网之鱼, <<: *pr}');
@@ -772,13 +775,13 @@
       youtube_domain: 'youtube.mrs', google_domain: 'google.mrs', telegram_domain: 'telegram.mrs',
       netflix_domain: 'netflix.mrs', notion_domain: 'notion.mrs', paypal_domain: 'paypal.mrs',
       onedrive_domain: 'onedrive.mrs', microsoft_domain: 'microsoft.mrs', apple_domain: 'apple-cn.mrs',
-      tiktok_domain: 'tiktok.mrs', ai_domain: 'ai.mrs',
+      tiktok_domain: 'tiktok.mrs', bahamut_domain: 'bahamut.mrs',
       'geolocation-!cn': 'geolocation-!cn.mrs', cn_domain: 'cn.mrs'
     };
     Object.keys(domainProviders).forEach(function (k) {
       out.push('  ' + k + ': { <<: *domain, url: "' + base + domainProviders[k] + '" }');
     });
-    var ipProviders = { cn_ip: 'cn.mrs', google_ip: 'google.mrs', telegram_ip: 'telegram.mrs', netflix_ip: 'netflix.mrs' };
+    var ipProviders = { cn_ip: 'cn.mrs', google_ip: 'google.mrs', telegram_ip: 'telegram.mrs', netflix_ip: 'netflix.mrs', ai_ip: 'ai.mrs' };
     Object.keys(ipProviders).forEach(function (k) {
       out.push('  ' + k + ': { <<: *ip, url: "' + geoip + ipProviders[k] + '" }');
     });
