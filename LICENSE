@@ -1,21 +1,42 @@
-MIT License
+Clash YML 配置工具 (Clash YML Config Tool)
+Copyright (c) 2026 Vardven (https://github.com/Vardven)
 
-Copyright (c) 2026 node-yml-config-tool contributors
+本软件以 CC BY-NC-SA 4.0 国际许可协议发布：
+Attribution-NonCommercial-ShareAlike 4.0 International (CC BY-NC-SA 4.0)
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+官方说明（中文）：https://creativecommons.org/licenses/by-nc-sa/4.0/deed.zh-hans
+法律文本全文（英文）：https://creativecommons.org/licenses/by-nc-sa/4.0/legalcode
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+----------------------------------------------------------------------
+您可以自由地：
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+- 共享 —— 以任何媒介或格式复制及分发本软件
+- 修改 —— 重新混合、转换本软件，或者基于本软件进行创作
+
+只要您遵守以下许可条款，许可人就无法收回您的上述自由：
+
+- 署名 (Attribution) —— 您必须给出适当的署名（注明原作者 Vardven
+  及源代码地址 https://github.com/Vardven/node-yml-config-tool），
+  提供指向本许可协议的链接，同时标明是否对本软件作了修改。
+  您可以用任何合理的方式来署名，但不得以任何方式暗示许可人
+  为您或您的使用背书。
+
+- 非商业性使用 (NonCommercial) —— 您不得将本软件用于商业目的。
+
+- 相同方式共享 (ShareAlike) —— 如果您对本软件进行了重新混合、
+  转换或基于本软件进行创作，您必须以与原先许可协议相同的
+  许可协议来分发您的作品。
+
+- 没有附加限制 —— 您不得增设法律条款或者科技措施，从而限制
+  其他人做本许可协议允许的事情。
+----------------------------------------------------------------------
+
+You are free to share and adapt this software under the terms of the
+Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International
+Public License: you must give appropriate credit to the original author
+(Vardven), you may not use the material for commercial purposes, and if
+you remix, transform, or build upon the material, you must distribute
+your contributions under the same license as the original.
+
+The full legal text is available at:
+https://creativecommons.org/licenses/by-nc-sa/4.0/legalcode
