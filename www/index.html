@@ -13,7 +13,7 @@
 <header>
   <div class="header-row">
     <h1>Clash YML 配置工具</h1>
-    <button id="settings-btn" type="button">设置</button>
+    <button id="settings-btn" type="button" aria-label="设置" title="设置"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" aria-hidden="true"><circle cx="12" cy="12" r="6.4" stroke-width="4.6" stroke-dasharray="3.35 2.39"/><circle cx="12" cy="12" r="2.5" fill="currentColor" stroke="none"/></svg></button>
   </div>
   <p class="sub">把 v2rayN 的单个节点和 Clash 订阅融合到一份配置里：单个节点与订阅统一管理、自由分组，导出完整 Clash / mihomo YAML；任意节点也能复制成分享链接，粘回 v2rayN 单独使用。本工具不含任何预置节点、订阅或分组，数据只保存在你自己的设备上。</p>
 </header>
@@ -149,7 +149,10 @@
 
   <!-- 设置（关于内容放在设置页里） -->
   <section id="tab-about" class="tab-page">
-    <h2 class="settings-title">设置</h2>
+    <div class="settings-bar">
+      <button id="settings-back" type="button">← 返回</button>
+      <h2 class="settings-title">设置</h2>
+    </div>
     <div class="card">
       <h3>语言设置</h3>
       <label>界面语言
@@ -158,7 +161,7 @@
     </div>
     <div class="card">
       <h3>检查更新</h3>
-      <p>当前版本：<span id="app-version">v1.0.3</span></p>
+      <p>当前版本：<span id="app-version">v1.0.4</span></p>
       <div class="row">
         <button id="check-update-btn">检查更新</button>
       </div>
