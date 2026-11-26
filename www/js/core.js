@@ -453,7 +453,7 @@
       { type: 'RULE-SET', payload: 'telegram_ip', target: '📲 Telegram', noResolve: true },
       { type: 'RULE-SET', payload: 'cn_ip', target: '🎯 全球直连' },
       { type: 'MATCH', payload: '', target: '🐟 漏网之鱼' }
-    ];
+    ].map(function (r) { r.builtin = true; return r; });
   }
   // 规则可选目标：内置策略组 + 服务组 + 自定义分组 + DIRECT/REJECT
   function ruleTargets(state) {
