@@ -455,11 +455,29 @@
   }
 
   function download(filename, text, type) {
+    // 安卓 App（Capacitor 的 WebView）不处理 blob 链接下载，点了没反应；
+    // 原生环境改走 Filesystem 写缓存文件 + 系统分享面板保存/发送。
+    var cap = window.Capacitor;
+    if (cap && typeof cap.isNativePlatform === 'function' && cap.isNativePlatform() &&
+        cap.Plugins && cap.Plugins.Filesystem && cap.Plugins.Share) {
+      var fs = cap.Plugins.Filesystem;
+      var share = cap.Plugins.Share;
+      fs.writeFile({ path: filename, data: text, directory: 'CACHE', encoding: 'utf8' })
+        .then(function () { return fs.getUri({ path: filename, directory: 'CACHE' }); })
+        .then(function (r) { return share.share({ title: filename, url: r.uri }); })
+        .catch(function () {
+          var em = $('export-msg');
+          if (em) msg(em, '保存失败，请改用「复制 YAML」', false);
+        });
+      return;
+    }
     var blob = new Blob([text], { type: type || 'text/plain' });
     var a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
     a.download = filename;
+    document.body.appendChild(a);
     a.click();
+    document.body.removeChild(a);
     setTimeout(function () { URL.revokeObjectURL(a.href); }, 1000);
   }
 
