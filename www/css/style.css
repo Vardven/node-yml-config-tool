@@ -51,3 +51,5 @@ a.btn-link.primary { background: #2563eb; color: #fff; border-color: #2563eb; }
 .rule-badge { font-size: 12px; color: #6b7280; border: 1px solid #d1d5db; border-radius: 999px; padding: 2px 10px; }
 
 .rule-name-input { width: 160px; }
+
+.rule-target-text { padding: 6px 10px; color: #374151; border: 1px dashed #d1d5db; border-radius: 8px; font-size: 14px; }
