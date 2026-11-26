@@ -1,7 +1,7 @@
 /*
  * core.js — Clash YML 配置工具的核心逻辑（无 DOM 依赖，可在浏览器和 Node 中运行）
  * 包含：分享链接解析、国家检测、节点命名、分组/订阅的纯数据操作、YAML 生成。
- * 初始状态不含任何预置节点或订阅，仅有一个空的「默认」分组。
+ * 初始状态不含任何预置节点或订阅；新节点默认归入内置策略组「全部节点」。
  */
 (function (global) {
   'use strict';
@@ -57,7 +57,7 @@
   }
 
   function emptyState() {
-    return { nodes: [], groups: ['默认'], subscriptions: [] };
+    return { nodes: [], groups: [], subscriptions: [] };
   }
 
   // ---------------------------------------------------------------------------
@@ -406,15 +406,48 @@
   // ---------------------------------------------------------------------------
   // 状态操作（纯函数，UI 与测试共用）
   // ---------------------------------------------------------------------------
+  var ALL_GROUP = '全部节点';
+  // 与导出 YAML 里的 proxy-groups 一一对应（只收录直接装节点的组）；filter 与模板保持一致
+  var POLICY_GROUPS = [
+    { name: '🌐 全部节点', filter: null },
+    { name: '♻️ 自动选择', filter: '^((?!(DIRECT)).)*$' },
+    { name: '☢ 负载均衡-散列', filter: '^((?!(DIRECT)).)*$' },
+    { name: '☢ 负载均衡-轮询', filter: '^((?!(DIRECT)).)*$' },
+    { name: '🇭🇰香港节点', filter: '港|HK|hk|Hong Kong|HongKong|hongkong' },
+    { name: '🇨🇳台湾节点', filter: '台|新北|彰化|TW|Taiwan' },
+    { name: '🇯🇵日本节点', filter: '日本|川日|东京|大阪|泉日|埼玉|沪日|深日|JP|Japan' },
+    { name: '🇸🇬新加坡节点', filter: '新加坡|坡|狮城|SG|Singapore' },
+    { name: '🇰🇷韩国节点', filter: 'KR|Korea|KOR|首尔|韩|韓' },
+    { name: '🇺🇲美国节点', filter: '美|波特兰|达拉斯|俄勒冈|凤凰城|费利蒙|硅谷|拉斯维加斯|洛杉矶|圣何塞|圣克拉拉|西雅图|芝加哥|US|United States' },
+    { name: '🇩🇪德国节点', filter: '德国|DE|Germany' },
+    { name: '🇬🇧英国节点', filter: '英国|GB|Great Britain' },
+    { name: '🧿其它地区', filter: '(?i)^(?!.*(?:港|hk|hongkong|台|tw|taiwan|日|jp|japan|新加坡|sg|singapore|美|us|unitedstates|英国|gb|great britain|德国|de|germany|kr|korea|首尔|韩|韓)).*' }
+  ];
+  function isPolicyGroup(name) {
+    return name === ALL_GROUP || POLICY_GROUPS.some(function (p) { return p.name === name; });
+  }
+  function policyGroupMembers(state, name) {
+    var pg = null;
+    POLICY_GROUPS.forEach(function (p) { if (p.name === name) pg = p; });
+    if (!pg) return [];
+    if (!pg.filter) return state.nodes.slice();
+    var f = pg.filter, flags = '';
+    if (f.indexOf('(?i)') === 0) { flags = 'i'; f = f.slice(4); }
+    var re;
+    try { re = new RegExp(f, flags); } catch (e) { return []; }
+    return state.nodes.filter(function (n) { return re.test(buildNodeName(n)); });
+  }
   function listGroups(state) {
     var counts = {};
     state.nodes.forEach(function (n) { counts[n.groupName] = (counts[n.groupName] || 0) + 1; });
     var names = {};
-    state.groups.forEach(function (g) { names[g] = true; });
-    Object.keys(counts).forEach(function (g) { names[g] = true; });
-    return Object.keys(names).sort().map(function (name) {
-      return { name: name, count: counts[name] || 0, custom: state.groups.indexOf(name) !== -1 };
+    state.groups.forEach(function (g) { if (g !== ALL_GROUP) names[g] = true; });
+    Object.keys(counts).forEach(function (g) { if (g !== ALL_GROUP) names[g] = true; });
+    var out = [{ name: ALL_GROUP, count: counts[ALL_GROUP] || 0, custom: false }];
+    Object.keys(names).sort().forEach(function (name) {
+      out.push({ name: name, count: counts[name] || 0, custom: state.groups.indexOf(name) !== -1 });
     });
+    return out;
   }
 
   function addGroup(state, name) {
@@ -427,6 +460,7 @@
   }
 
   function renameGroup(state, oldName, newName) {
+    if (isPolicyGroup(oldName)) return { ok: false, error: ct('策略组不能重命名') };
     newName = String(newName || '').trim();
     if (!newName) return { ok: false, error: ct('新分组名不能为空') };
     if (newName.indexOf('|') !== -1) return { ok: false, error: ct('分组名不能包含「|」') };
@@ -443,6 +477,7 @@
   }
 
   function deleteGroup(state, name) {
+    if (isPolicyGroup(name)) return { ok: false, error: ct('策略组不能删除') };
     var count = state.nodes.filter(function (n) { return n.groupName === name; }).length;
     if (count > 0) return { ok: false, error: ct('分组「{0}」里还有 {1} 个节点，请先把节点移到其它分组或删掉', name, count) };
     state.groups = state.groups.filter(function (g) { return g !== name; });
@@ -456,7 +491,7 @@
     }
     node.id = node.id || uid();
     state.nodes.push(node);
-    if (state.groups.indexOf(node.groupName) === -1) state.groups.push(node.groupName);
+    if (node.groupName !== ALL_GROUP && state.groups.indexOf(node.groupName) === -1) state.groups.push(node.groupName);
     return { ok: true, node: node };
   }
 
@@ -943,7 +978,11 @@
     generateFullYaml: generateFullYaml,
     buildShareLink: buildShareLink,
     decodeSubContent: decodeSubContent,
-    parseClashProxies: parseClashProxies
+    parseClashProxies: parseClashProxies,
+    ALL_GROUP: ALL_GROUP,
+    POLICY_GROUPS: POLICY_GROUPS,
+    isPolicyGroup: isPolicyGroup,
+    policyGroupMembers: policyGroupMembers
   };
 
   global.NodeYmlCore = Core;
