@@ -571,22 +571,6 @@
     return { ok: true, sub: sub };
   }
 
-  function parseBulkSubscriptions(state, text) {
-    var added = [], skipped = [];
-    String(text || '').split(/\r?\n/).forEach(function (rawLine) {
-      var line = rawLine.trim();
-      if (!line) return;
-      var m = line.match(/https?:\/\/\S+/i);
-      if (!m) { skipped.push({ line: line, reason: ct('没有找到链接') }); return; }
-      var url = m[0];
-      var name = line.slice(0, m.index).replace(/[:：\-—\s]+$/, '').trim();
-      var res = addSubscription(state, name, url);
-      if (res.ok) added.push(res.sub);
-      else skipped.push({ line: line, reason: res.error });
-    });
-    return { added: added, skipped: skipped };
-  }
-
   // ---------------------------------------------------------------------------
   // 完整 YAML 导出（通用模板 + 用户自己的节点与订阅）
   // ---------------------------------------------------------------------------
@@ -857,20 +841,29 @@
   }
 
   // ------------------------------------------------------------ 订阅内容解码
+  // 支持：base64 内容（标准 / URL 安全 / 无填充 / 双层编码，解码后可以是链接
+  // 列表或 Clash YAML）、一行一条的链接列表、Clash 配置 YAML。
   function decodeSubContent(text) {
-    var t = String(text || '').trim();
-    if (!t) return { links: [] };
-    if (/(^|\n)\s*proxies\s*:/.test(t)) return { yaml: t, links: [] };
-    var compact = t.replace(/\s+/g, '');
-    var decoded = '';
-    if (/^[A-Za-z0-9+/=_-]+$/.test(compact) && compact.length % 4 !== 1) {
+    var body = String(text || '').trim();
+    if (!body) return { links: [] };
+    for (var i = 0; i < 2; i++) {
+      if (/(^|\n)\s*proxies\s*:/.test(body)) return { yaml: body, links: [] };
+      if (body.indexOf('://') !== -1) break;
+      var compact = body.replace(/\s+/g, '');
+      if (!/^[A-Za-z0-9+/=_-]+$/.test(compact) || compact.length % 4 === 1) break;
+      var b64 = compact.replace(/-/g, '+').replace(/_/g, '/');
+      while (b64.length % 4) b64 += '=';
+      var decoded = '';
       try {
-        var b64 = compact.replace(/-/g, '+').replace(/_/g, '/');
-        if (typeof atob !== 'undefined') decoded = decodeURIComponent(escape(atob(b64)));
-        else decoded = Buffer.from(b64, 'base64').toString('utf8');
-      } catch (e) { decoded = ''; }
+        if (typeof atob !== 'undefined') {
+          var rawBytes = atob(b64);
+          try { decoded = decodeURIComponent(escape(rawBytes)); } catch (e2) { decoded = rawBytes; }
+        } else decoded = Buffer.from(b64, 'base64').toString('utf8');
+      } catch (e) { break; }
+      if (!decoded || decoded === body) break;
+      body = decoded;
     }
-    var body = decoded && decoded.indexOf('://') !== -1 ? decoded : t;
+    if (/(^|\n)\s*proxies\s*:/.test(body)) return { yaml: body, links: [] };
     var links = [];
     body.split(/\r?\n/).forEach(function (line) {
       var m = line.match(/(vmess|vless|trojan|ss|hysteria2|hy2|tuic|anytls):\/\/\S+/);
@@ -1023,7 +1016,6 @@
     autoSubName: autoSubName,
     maskUrl: maskUrl,
     addSubscription: addSubscription,
-    parseBulkSubscriptions: parseBulkSubscriptions,
     generateFullYaml: generateFullYaml,
     buildShareLink: buildShareLink,
     decodeSubContent: decodeSubContent,
