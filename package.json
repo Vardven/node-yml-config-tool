@@ -30,7 +30,8 @@
     "@capacitor/android": "^6.1.2",
     "@capacitor/core": "^6.1.2",
     "@capacitor/filesystem": "^6.0.0",
-    "@capacitor/share": "^6.0.0"
+    "@capacitor/share": "^6.0.0",
+    "capacitor-save-as": "file:./plugins/capacitor-save-as"
   },
   "description": "Clash YML 配置工具 — 管理 Clash / mihomo 节点、分组与订阅，导出完整 YAML。初始为空，不含任何预置数据。",
   "devDependencies": {
@@ -49,5 +50,5 @@
     "serve": "npx --yes serve www -p 8080",
     "start": "electron ."
   },
-  "version": "1.0.8"
+  "version": "1.0.9"
 }
