@@ -70,5 +70,13 @@ a.btn-link.primary { background: #2563eb; color: #fff; border-color: #2563eb; }
 #back-top { position: fixed; right: 16px; bottom: 88px; z-index: 40; width: 44px; height: 44px; border-radius: 50%; border: none; background: #2563eb; color: #fff; font-size: 20px; line-height: 1; box-shadow: 0 4px 14px rgba(0,0,0,.25); cursor: pointer; }
 #back-top[hidden] { display: none; }
 
-.cand-main { display: flex; align-items: center; gap: 8px; flex: 1; cursor: pointer; min-width: 0; }
+.cand-main { display: flex; flex-direction: row; align-items: center; gap: 8px; flex: 1; cursor: pointer; min-width: 0; }
+.cand-row .rule-badge, .cand-row .hint { flex: none; }
 .cand-row input.cand-loc { width: 64px; flex: none; }
+
+/* 候选行窄屏适配：整行可换行，备注独占第二行，名字不再被挤成竖条 */
+.cand-name { min-width: 120px; }
+@media (max-width: 560px) {
+  .cand-row { flex-wrap: wrap; row-gap: 2px; }
+  .cand-row .hint { order: 5; flex: 1 1 100%; padding-left: 26px; }
+}
