@@ -74,5 +74,5 @@
     "serve": "npx --yes serve www -p 8080",
     "start": "electron ."
   },
-  "version": "1.0.15"
+  "version": "1.0.16"
 }
