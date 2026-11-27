@@ -53,7 +53,7 @@ jobs:
       - name: Set Android version from package.json
         run: |
           VER=$(node -p "require('./package.json').version")
-          CODE=$(node -e "const p=process.argv[1].split('.').map(Number); console.log(p[0]*10000+p[1]*100+p[2])" "$VER")
+          CODE=$(node -e "const p=process.argv[1].split('.').map(Number); console.log(p[0]*1000000+p[1]*10000+p[2]*100)" "$VER")
           echo "versionName=$VER versionCode=$CODE"
           sed -i "s/versionCode [0-9]*/versionCode $CODE/" android/app/build.gradle
           sed -i "s/versionName \"[^\"]*\"/versionName \"$VER\"/" android/app/build.gradle
@@ -80,7 +80,7 @@ jobs:
               variant.outputs.all { output ->
                   def abi = output.getFilter(com.android.build.OutputFile.ABI)
                   if (abi != null) {
-                      output.versionCodeOverride = android.defaultConfig.versionCode * 10 + abiCodes[abi]
+                      output.versionCodeOverride = android.defaultConfig.versionCode + abiCodes[abi]
                   }
               }
           }
