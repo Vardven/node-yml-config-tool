@@ -24,7 +24,6 @@
     s.groups = (s.groups || []).filter(function (g) { return g !== '默认' && g !== Core.ALL_GROUP; });
     s.nodes.forEach(function (n) { if (n.groupName === '默认') n.groupName = Core.ALL_GROUP; });
     if (!s.settings || typeof s.settings !== 'object') s.settings = {};
-    if (!s.settings.testUrl) s.settings.testUrl = Core.DEFAULT_TEST_URL;
     if (!Array.isArray(s.rules)) { s.rules = Core.defaultRules(); return s; }
     // 内置（默认）规则完全锁定：每次加载都按类型+值与出厂默认对齐——
     // 目标/no-resolve 被旧版本改过的强制改回（如 cn_ip 被改成香港节点组），缺失的默认规则按规范位置补回；
@@ -114,177 +113,20 @@
     $('node-list').innerHTML = list.map(function (n) {
       var name = Core.buildNodeName(n);
       var badges = '<span class="badge">' + esc(n.type) + '</span>';
-      if (testingIds[n.id]) {
-        badges += '<span class="badge ping testing">测试中…</span>';
-      } else if (n.test) {
-        if (n.test.ok) badges += '<span class="badge ping ' + (n.test.delay < 300 ? 'ok' : (n.test.delay < 800 ? 'warn' : 'slow')) + '">' + n.test.delay + 'ms</span>';
-        else badges += '<span class="badge ping bad">不通</span>';
-        if (n.test.country) badges += '<span class="badge country">' + esc(n.test.country) + '</span>';
-      }
       return '<div class="card">' +
         '<div class="card-head"><strong>' + esc(name) + '</strong><span class="badges">' + badges + '</span></div>' +
         '<pre class="yaml">' + esc(Core.nodeYaml(n)) + '</pre>' +
         '<div class="row">' +
         '<button data-act="link" data-id="' + n.id + '">复制链接</button>' +
-        '<button data-act="test" data-id="' + n.id + '">测速</button>' +
         '<button data-act="edit" data-id="' + n.id + '">编辑</button>' +
         '<button data-act="del" data-id="' + n.id + '" class="danger">删除</button>' +
         '</div></div>';
     }).join('');
-    var deadCount = state.nodes.filter(function (n) { return n.test && !n.test.ok; }).length;
-    var ddBtn = $('del-dead-btn');
-    if (ddBtn) {
-      ddBtn.hidden = deadCount === 0;
-      ddBtn.textContent = t('删除不通节点') + '（' + deadCount + '）';
-    }
     // 分组筛选下拉
     var cur = $('node-group-filter').value;
     $('node-group-filter').innerHTML = '<option value="">全部分组</option>' + Core.listGroups(state).map(function (g) {
       return '<option value="' + esc(g.name) + '"' + (g.name === cur ? ' selected' : '') + '>' + esc(g.name) + '</option>';
     }).join('');
-  }
-
-  // ---------------------------------------------------------------- 节点测速（内置 mihomo 内核）
-  var testingIds = {};
-  var testRunning = false;
-  var coreSession = null;
-
-  function nativeBridge() {
-    if (window.CoreBridge && window.CoreBridge.startCore) return window.CoreBridge;
-    var cap = window.Capacitor;
-    if (cap && typeof cap.isNativePlatform === 'function' && cap.isNativePlatform() && cap.Plugins && cap.Plugins.AppTools) return cap.Plugins.AppTools;
-    return null;
-  }
-  function testUrl() { return (state.settings && state.settings.testUrl) || Core.DEFAULT_TEST_URL; }
-  function startCoreFor(nodes) {
-    var bridge = nativeBridge();
-    if (!bridge) return Promise.reject(new Error('nobridge'));
-    var mixedPort = 17000 + Math.floor(Math.random() * 1500);
-    var apiPort = mixedPort + 1000;
-    var cfg = Core.buildTestConfig(nodes, mixedPort, apiPort);
-    return bridge.startCore({ config: cfg, apiPort: apiPort, mixedPort: mixedPort }).then(function () {
-      coreSession = { bridge: bridge, apiBase: 'http://127.0.0.1:' + apiPort, mixedPort: mixedPort };
-      return coreSession;
-    });
-  }
-  function stopCore() {
-    if (coreSession && coreSession.bridge.stopCore) {
-      try { var p = coreSession.bridge.stopCore({}); if (p && p.catch) p.catch(function () {}); } catch (e) { /* 忽略 */ }
-    }
-    coreSession = null;
-  }
-  function apiDelay(session, node) {
-    var url = session.apiBase + '/proxies/' + encodeURIComponent(Core.buildNodeName(node)) + '/delay?timeout=6000&url=' + encodeURIComponent(testUrl());
-    return fetch(url).then(function (r) {
-      if (!r.ok) throw new Error('dead');
-      return r.json();
-    }).then(function (d) {
-      if (!d || typeof d.delay !== 'number') throw new Error('dead');
-      return d.delay;
-    });
-  }
-  function apiSelect(session, node) {
-    return fetch(session.apiBase + '/proxies/' + Core.TEST_GROUP, {
-      method: 'PUT', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: Core.buildNodeName(node) })
-    });
-  }
-  function fetchCountry(session) {
-    return session.bridge.fetchViaProxy({ port: session.mixedPort, url: 'https://www.cloudflare.com/cdn-cgi/trace' }).then(function (r) {
-      var loc = Core.parseTraceLoc(r && r.text);
-      return loc ? Core.countryByCode(loc) : null;
-    }).catch(function () { return null; });
-  }
-  function testNodeWith(session, node) {
-    return apiDelay(session, node).then(function (delay) {
-      node.test = { ok: true, delay: delay, at: Date.now() };
-      return apiSelect(session, node).then(function () { return fetchCountry(session); }).then(function (c) {
-        if (c) node.test.country = (c.flag ? c.flag + ' ' : '') + c.loc;
-        return node.test;
-      });
-    }, function () {
-      node.test = { ok: false, at: Date.now() };
-      return node.test;
-    });
-  }
-  function testOne(node) {
-    if (testRunning) return;
-    if (!nativeBridge()) { toast(t('网页版无法测速，请使用 Windows / macOS / Android 版（内置 mihomo 内核）'), false); return; }
-    testRunning = true; testingIds[node.id] = true; renderNodes();
-    startCoreFor(state.nodes).then(function (session) {
-      return testNodeWith(session, node);
-    }).then(function () {
-      if (node.test && node.test.ok) toast(t('测速完成：{0}ms', node.test.delay), true);
-      else toast(t('该节点不通'), false);
-    }).catch(function () {
-      toast(t('测速失败：内核启动失败'), false);
-    }).then(function () {
-      stopCore(); testRunning = false; delete testingIds[node.id]; save(); renderNodes();
-    });
-  }
-  function testAll() {
-    if (testRunning) return;
-    if (!nativeBridge()) { toast(t('网页版无法测速，请使用 Windows / macOS / Android 版（内置 mihomo 内核）'), false); return; }
-    var list = filteredNodeList();
-    if (!list.length) { toast(t('没有可测速的节点'), false); return; }
-    testRunning = true;
-    list.forEach(function (n) { testingIds[n.id] = true; });
-    renderNodes();
-    var status = $('test-status');
-    var done = 0;
-    function progress() { if (status) status.textContent = t('测速中 {0}/{1}', done, list.length); }
-    progress();
-    var aliveCount = 0;
-    startCoreFor(state.nodes).then(function (session) {
-      var queue = list.slice();
-      function worker() {
-        var n = queue.shift();
-        if (!n) return Promise.resolve();
-        return apiDelay(session, n).then(function (delay) {
-          n.test = { ok: true, delay: delay, at: Date.now() };
-        }, function () {
-          n.test = { ok: false, at: Date.now() };
-        }).then(function () {
-          done++; progress();
-          delete testingIds[n.id]; renderNodes();
-          return worker();
-        });
-      }
-      var workers = [];
-      for (var i = 0; i < Math.min(6, list.length); i++) workers.push(worker());
-      return Promise.all(workers).then(function () { return session; });
-    }).then(function (session) {
-      var aliveNodes = list.filter(function (n) { return n.test && n.test.ok; });
-      aliveCount = aliveNodes.length;
-      var chain = Promise.resolve();
-      aliveNodes.forEach(function (n) {
-        chain = chain.then(function () {
-          return apiSelect(session, n).then(function () { return fetchCountry(session); }).then(function (c) {
-            if (c) { n.test.country = (c.flag ? c.flag + ' ' : '') + c.loc; renderNodes(); }
-          });
-        });
-      });
-      return chain;
-    }).then(function () {
-      var dead = list.filter(function (n) { return n.test && !n.test.ok; }).length;
-      toast(t('测速完成：可用 {0} · 不通 {1}', aliveCount, dead), true);
-    }).catch(function () {
-      toast(t('测速失败：内核启动失败'), false);
-    }).then(function () {
-      stopCore(); testRunning = false; testingIds = {};
-      if (status) status.textContent = '';
-      save(); renderNodes();
-    });
-  }
-  function deleteDead() {
-    var dead = state.nodes.filter(function (n) { return n.test && !n.test.ok; });
-    if (!dead.length) return;
-    if (!confirm(t('删除 {0} 个不通节点？', dead.length))) return;
-    var ids = {};
-    dead.forEach(function (n) { ids[n.id] = true; });
-    state.nodes = state.nodes.filter(function (n) { return !ids[n.id]; });
-    save(); renderAll();
-    toast(t('已删除 {0} 个不通节点', dead.length), true);
   }
 
   // ---------------------------------------------------------------- 分组
@@ -588,7 +430,6 @@
       document.body.classList.add('settings-open');
       $('settings-btn').classList.add('active');
       $('tab-about').classList.add('active');
-      if ($('set-test-url')) $('set-test-url').value = testUrl();
     });
 
     $('rule-list').addEventListener('change', function (e) {
@@ -624,8 +465,6 @@
       msg($('rule-msg'), t('已恢复默认规则'), true);
     });
     $('node-search').addEventListener('input', renderNodes);
-    $('test-all-btn').addEventListener('click', testAll);
-    $('del-dead-btn').addEventListener('click', deleteDead);
     $('node-group-filter').addEventListener('change', renderNodes);
     $('node-type-filter').addEventListener('change', renderNodes);
     $('node-list').addEventListener('click', function (e) {
@@ -639,7 +478,6 @@
         setTimeout(function () { btn.textContent = oldTxt; }, 1200);
         return;
       }
-      if (btn.dataset.act === 'test') { testOne(node); return; }
       if (btn.dataset.act === 'del') {
         if (confirm(t('删除节点 {0}？', Core.buildNodeName(node)))) {
           state.nodes = state.nodes.filter(function (n) { return n.id !== id; });
@@ -916,30 +754,13 @@
       });
     }
 
-    // 测速设置：测速链接可改（测延迟时内核访问的地址），保存到 state.settings.testUrl
-    if ($('set-test-url')) {
-      $('set-test-url-save').addEventListener('click', function () {
-        var v = $('set-test-url').value.trim();
-        if (!/^https?:\/\//i.test(v)) { toast(t('测速链接格式不对'), false); return; }
-        if (!state.settings) state.settings = {};
-        state.settings.testUrl = v; save();
-        toast(t('已保存'), true);
-      });
-      $('set-test-url-reset').addEventListener('click', function () {
-        if (!state.settings) state.settings = {};
-        state.settings.testUrl = Core.DEFAULT_TEST_URL;
-        $('set-test-url').value = Core.DEFAULT_TEST_URL; save();
-        toast(t('已恢复默认测速链接'), true);
-      });
-    }
-
     $('check-update-btn').addEventListener('click', function () { checkForUpdates(true); });
     $('update-now-btn').addEventListener('click', function () { startInAppUpdate(); });
     $('update-later-btn').addEventListener('click', function () { $('update-modal').hidden = true; });
   }
 
   // ---------------------------------------------------------------- 更新检测
-  var APP_VERSION = '1.0.16';
+  var APP_VERSION = '1.0.17';
   var LATEST_API = 'https://api.github.com/repos/Vardven/node-yml-config-tool/releases/latest';
   var updateReleaseUrl = 'https://github.com/Vardven/node-yml-config-tool/releases/latest';
   var latestRelease = null;

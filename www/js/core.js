@@ -56,10 +56,9 @@
     return Buffer.from(s, 'base64').toString('utf-8');
   }
 
-  var DEFAULT_TEST_URL = 'http://www.gstatic.com/generate_204';
 
   function emptyState() {
-    return { nodes: [], groups: [], subscriptions: [], rules: defaultRules(), settings: { testUrl: DEFAULT_TEST_URL } };
+    return { nodes: [], groups: [], subscriptions: [], rules: defaultRules(), settings: {} };
   }
 
   // ---------------------------------------------------------------------------
@@ -1031,65 +1030,10 @@
     return { rawName: name, type: String(it.type), server: String(it.server), port: Number(it.port) || 443, details: d };
   }
 
-  // ---------------------------------------------------------------------------
-  // 节点测速：生成给内置 mihomo 内核用的临时配置（只含要测的节点 + 一个选择组），
-  // 内核起来后用它的 /proxies/<name>/delay 接口测真实延迟（测速链接可在设置里改），
-  // 出口国家把选择组切到该节点后，经混合端口访问 Cloudflare trace 看 loc=。
-  // ---------------------------------------------------------------------------
-  var TEST_GROUP = 'TEST';
-  function buildTestConfig(nodes, mixedPort, apiPort) {
-    var lines = [];
-    lines.push('mixed-port: ' + mixedPort);
-    lines.push('external-controller: 127.0.0.1:' + apiPort);
-    lines.push('allow-lan: false');
-    lines.push('mode: rule');
-    lines.push('log-level: warning');
-    lines.push('dns:');
-    lines.push('  enable: true');
-    lines.push('  ipv6: false');
-    lines.push('  default-nameserver:');
-    lines.push('    - 223.5.5.5');
-    lines.push('    - 119.29.29.29');
-    lines.push('  nameserver:');
-    lines.push('    - https://doh.pub/dns-query');
-    lines.push('    - https://dns.alidns.com/dns-query');
-    lines.push('proxies:');
-    nodes.forEach(function (n) { lines.push(nodeYaml(n)); });
-    var names = nodes.map(function (n) { return yamlQuote(buildNodeName(n)); }).join(', ');
-    lines.push('proxy-groups:');
-    lines.push('  - {name: ' + TEST_GROUP + ', type: select, proxies: [' + names + ']}');
-    lines.push('rules:');
-    lines.push('  - MATCH,' + TEST_GROUP);
-    return lines.join('\n') + '\n';
-  }
-  function flagEmoji(code) {
-    if (!code || String(code).length !== 2) return '';
-    var c = String(code).toUpperCase();
-    return String.fromCodePoint(0x1F1E6 + c.charCodeAt(0) - 65, 0x1F1E6 + c.charCodeAt(1) - 65);
-  }
-  function countryByCode(code) {
-    if (!code) return null;
-    var c = String(code).toUpperCase();
-    for (var i = 0; i < COUNTRY_PATTERNS.length; i++) {
-      if (COUNTRY_PATTERNS[i].codes.indexOf(c) !== -1) return { code: c, loc: COUNTRY_PATTERNS[i].loc, flag: flagEmoji(c) };
-    }
-    return { code: c, loc: c, flag: flagEmoji(c) };
-  }
-  function parseTraceLoc(text) {
-    if (!text) return null;
-    var m = /(?:^|\n)loc=([A-Za-z]{2})/.exec(String(text));
-    return m ? m[1].toUpperCase() : null;
-  }
-
   var Core = {
     uid: uid,
     isIp: isIp,
     emptyState: emptyState,
-    DEFAULT_TEST_URL: DEFAULT_TEST_URL,
-    TEST_GROUP: TEST_GROUP,
-    buildTestConfig: buildTestConfig,
-    countryByCode: countryByCode,
-    parseTraceLoc: parseTraceLoc,
     detectCountry: detectCountry,
     parseShareLink: parseShareLink,
     buildNodeName: buildNodeName,

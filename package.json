@@ -9,15 +9,6 @@
       "electron/**/*",
       "package.json"
     ],
-    "extraResources": [
-      {
-        "from": "core",
-        "to": "core",
-        "filter": [
-          "**/*"
-        ]
-      }
-    ],
     "nsis": {
       "allowToChangeInstallationDirectory": true,
       "artifactName": "node-yml-config-tool-${version}-${arch}-setup.${ext}",
@@ -74,5 +65,5 @@
     "serve": "npx --yes serve www -p 8080",
     "start": "electron ."
   },
-  "version": "1.0.16"
+  "version": "1.0.17"
 }
