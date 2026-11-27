@@ -396,8 +396,14 @@
       if (d.udpRelayMode) put('udp-relay-mode', d.udpRelayMode);
     }
     if (node.type === 'hysteria2') {
-      if (d.obfs) put('obfs', d.obfs);
-      if (d.obfsPassword) put('obfs-password', d.obfsPassword);
+      // obfs 为 none/空 = 不启用混淆，绝不能写进配置：mihomo 只要见到 obfs 字段
+      // 就要求同时有 obfs-password，写出 obfs: none 会让整份配置校验失败
+      // （报错 missing obfs password）。有混淆类型但缺密码时同理不写，
+      // 保证配置至少能加载（该节点本身的数据不完整，连接问题另说）。
+      if (d.obfs && d.obfs !== 'none' && d.obfsPassword) {
+        put('obfs', d.obfs);
+        put('obfs-password', d.obfsPassword);
+      }
     }
     if (node.type !== 'ss') lines.push('    udp: true');
     else lines.push('    udp: true');
