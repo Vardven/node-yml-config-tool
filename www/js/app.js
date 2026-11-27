@@ -721,10 +721,10 @@
       if (!subCandidates.length) { box.innerHTML = ''; return; }
       var rows = subCandidates.map(function (c, i) {
         var nm = Core.buildNodeName({ groupName: c.groupName || Core.ALL_GROUP, location: c.location || t('未知'), server: c.server, port: c.port });
-        return '<label class="cand-row"><input type="checkbox" data-ci="' + i + '" checked><span class="cand-name">' + esc(nm) + '</span><span class="rule-badge">' + esc(c.type) + '</span></label>';
+        return '<label class="cand-row"><input type="checkbox" data-ci="' + i + '" checked><span class="cand-name">' + esc(nm) + '</span><span class="rule-badge">' + esc(c.type) + '</span>' + (c.detectNote ? '<span class="hint">' + esc(c.detectNote) + '</span>' : '') + '</label>';
       }).join('');
       box.innerHTML = '<div class="card"><div class="card-head"><strong>' + esc(t('解析结果')) + '</strong><span id="cand-count"></span></div>' +
-        '<div class="row"><button id="cand-all-btn">全选</button><button id="cand-none-btn">全不选</button><button id="cand-add-btn" class="primary">添加选中节点</button></div>' +
+        '<div class="row"><button id="cand-all-btn">全选</button><button id="cand-none-btn">全不选</button><button id="cand-add-btn" class="primary">添加选中节点</button><button id="cand-detect-btn">一键检测国家</button></div>' +
         '<div class="cand-list">' + rows + '</div></div>';
       updateCandCount();
     }
@@ -742,6 +742,7 @@
       var boxes = $('sub-candidates').querySelectorAll('input[type="checkbox"][data-ci]');
       if (btn.id === 'cand-all-btn') { boxes.forEach(function (b) { b.checked = true; }); updateCandCount(); return; }
       if (btn.id === 'cand-none-btn') { boxes.forEach(function (b) { b.checked = false; }); updateCandCount(); return; }
+      if (btn.id === 'cand-detect-btn') { detectCountries(btn); return; }
       if (btn.id === 'cand-add-btn') {
         var picked = [];
         boxes.forEach(function (b) { if (b.checked) picked.push(subCandidates[Number(b.dataset.ci)]); });
@@ -751,6 +752,62 @@
         importCandidates(picked, [], $('sub-msg'));
       }
     });
+    // 按服务器地址查国家：域名先 DoH 解析成 IP，再查 IP 地理库；
+    // 入口落在 Cloudflare 段或运营商是 Cloudflare 的判为 CDN 前置——只能定入口、定不了出口，不猜
+    function lookupServerCountry(server) {
+      function geo(ip) {
+        if (Core.isCloudflareIp(ip)) return Promise.resolve({ status: 'cdn' });
+        return fetchSubscription('https://ipwho.is/' + ip).then(function (txt) {
+          var g = JSON.parse(txt);
+          if (!g || !g.success || !g.country_code) return { status: 'fail' };
+          var conn = g.connection || {};
+          var orgTxt = (String(conn.isp || '') + ' ' + String(conn.org || '')).toLowerCase();
+          if (conn.asn === 13335 || orgTxt.indexOf('cloudflare') !== -1) return { status: 'cdn' };
+          var name = Core.countryNameByCode(g.country_code);
+          return name ? { status: 'ok', name: name } : { status: 'fail' };
+        }).catch(function () { return { status: 'fail' }; });
+      }
+      if (/^\d{1,3}(\.\d{1,3}){3}$/.test(server)) return geo(server);
+      return fetchSubscription('https://dns.google/resolve?name=' + encodeURIComponent(server) + '&type=A').then(function (txt) {
+        var dj = JSON.parse(txt);
+        var ans = (dj.Answer || []).filter(function (a) { return a.type === 1 && /^\d{1,3}(\.\d{1,3}){3}$/.test(a.data); });
+        if (ans.length) return geo(ans[0].data);
+        // 没有 IPv4 记录的纯 v6 域名再查 AAAA
+        return fetchSubscription('https://dns.google/resolve?name=' + encodeURIComponent(server) + '&type=AAAA').then(function (txt2) {
+          var dj2 = JSON.parse(txt2);
+          var ans2 = (dj2.Answer || []).filter(function (a) { return a.type === 28 && a.data.indexOf(':') !== -1; });
+          if (!ans2.length) return { status: 'fail' };
+          return geo(ans2[0].data);
+        }).catch(function () { return { status: 'fail' }; });
+      }).catch(function () { return { status: 'fail' }; });
+    }
+    function detectCountries(btn) {
+      var targets = subCandidates.filter(function (c) { return !c.location; });
+      if (!targets.length) { msg($('sub-msg'), t('没有需要检测的节点（都已有国家）'), true); return; }
+      btn.disabled = true; btn.textContent = t('检测中…');
+      var byServer = {};
+      targets.forEach(function (c) { (byServer[c.server] = byServer[c.server] || []).push(c); });
+      var okN = 0, cdnN = 0, failN = 0;
+      var chain = Promise.resolve();
+      Object.keys(byServer).forEach(function (server) {
+        chain = chain.then(function () {
+          return lookupServerCountry(server).then(function (r) {
+            byServer[server].forEach(function (c) {
+              if (r.status === 'ok') { c.location = r.name; c.detectNote = ''; }
+              else if (r.status === 'cdn') c.detectNote = t('CDN 前置，出口国家不确定');
+              else c.detectNote = t('检测失败');
+            });
+            if (r.status === 'ok') okN += byServer[server].length;
+            else if (r.status === 'cdn') cdnN += byServer[server].length;
+            else failN += byServer[server].length;
+          });
+        });
+      });
+      chain.then(function () {
+        renderSubCandidates(); applyI18n($('sub-candidates'));
+        msg($('sub-msg'), t('检测完成：{0} 个已定位，{1} 个 CDN 前置无法确定，{2} 个失败', okN, cdnN, failN), okN > 0);
+      });
+    }
     function fetchSubscription(url) {
       var headers = { 'User-Agent': 'clash.meta' };
       if (window.nativeFetch) return window.nativeFetch(url, headers);
@@ -831,7 +888,7 @@
   }
 
   // ---------------------------------------------------------------- 更新检测
-  var APP_VERSION = '1.0.18';
+  var APP_VERSION = '1.0.19';
   var LATEST_API = 'https://api.github.com/repos/Vardven/node-yml-config-tool/releases/latest';
   var updateReleaseUrl = 'https://github.com/Vardven/node-yml-config-tool/releases/latest';
   var latestRelease = null;

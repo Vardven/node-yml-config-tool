@@ -562,6 +562,20 @@
     return { ok: true, moved: moved, skipped: skipped };
   }
 
+  // 国家代码 → 节点名用的地区名（须含地区关键词，才能被地区策略组 filter 命中）
+  var COUNTRY_NAMES = { JP: '日本', US: '美国', TW: '台湾', HK: '香港', SG: '新加坡', KR: '韩国', DE: '德国', GB: '英国', FR: '法国', CA: '加拿大', AU: '澳大利亚', NL: '荷兰', IN: '印度', RU: '俄罗斯', IT: '意大利', ES: '西班牙', CH: '瑞士', SE: '瑞典', NO: '挪威', FI: '芬兰', DK: '丹麦', PL: '波兰', TR: '土耳其', BR: '巴西', MX: '墨西哥', AR: '阿根廷', CL: '智利', ZA: '南非', EG: '埃及', NG: '尼日利亚', KE: '肯尼亚', IL: '以色列', AE: '阿联酋', SA: '沙特', TH: '泰国', VN: '越南', MY: '马来西亚', ID: '印尼', PH: '菲律宾', CN: '中国', MO: '澳门', NZ: '新西兰', IE: '爱尔兰', AT: '奥地利', BE: '比利时', CZ: '捷克', PT: '葡萄牙', GR: '希腊', HU: '匈牙利', UA: '乌克兰', RO: '罗马尼亚', KZ: '哈萨克斯坦', PK: '巴基斯坦', BD: '孟加拉', MM: '缅甸', KH: '柬埔寨', IS: '冰岛', LU: '卢森堡', EE: '爱沙尼亚', LV: '拉脱维亚', LT: '立陶宛', HR: '克罗地亚', RS: '塞尔维亚', BG: '保加利亚', GE: '格鲁吉亚', AM: '亚美尼亚', AZ: '阿塞拜疆', BY: '白俄罗斯', PE: '秘鲁', CO: '哥伦比亚', VE: '委内瑞拉', UY: '乌拉圭', EC: '厄瓜多尔', PA: '巴拿马', CU: '古巴' };
+  function countryNameByCode(code) { return COUNTRY_NAMES[String(code || '').toUpperCase()] || ''; }
+  // Cloudflare 公布的 IPv4 段：入口 IP 落在这里说明是 CDN 前置，查到的只是入口、定不了出口国家
+  var CF_V4_RANGES = ['103.21.244.0/22', '103.22.200.0/22', '103.31.4.0/22', '104.16.0.0/13', '104.24.0.0/14', '108.162.192.0/18', '131.0.72.0/22', '141.101.64.0/18', '162.158.0.0/15', '172.64.0.0/13', '173.245.48.0/20', '188.114.96.0/20', '190.93.240.0/20', '197.234.240.0/22', '198.41.128.0/17'];
+  function ipNum(ip) { var ps = String(ip).split('.'); if (ps.length !== 4) return -1; var n = 0; for (var i = 0; i < 4; i++) { var v = Number(ps[i]); if (!(v >= 0 && v <= 255)) return -1; n = n * 256 + v; } return n; }
+  function isCloudflareIp(ip) {
+    var n = ipNum(ip); if (n < 0) return false;
+    return CF_V4_RANGES.some(function (cidr) {
+      var seg = cidr.split('/'); var base = ipNum(seg[0]); var bits = Number(seg[1]);
+      var mask = bits === 0 ? 0 : (0xFFFFFFFF << (32 - bits)) >>> 0;
+      return ((n & mask) >>> 0) === ((base & mask) >>> 0);
+    });
+  }
   // 节点身份：同分组内判断「相同节点」用——类型+地址+端口+账号凭据+传输方式，
   // 与显示名无关（同一节点换个地点名/备注导入，也算重复，不重复导入）
   function nodeIdentity(node) {
@@ -1059,6 +1073,8 @@
     moveGroupNodes: moveGroupNodes,
     addNode: addNode,
     nodeIdentity: nodeIdentity,
+    countryNameByCode: countryNameByCode,
+    isCloudflareIp: isCloudflareIp,
     autoSubName: autoSubName,
     maskUrl: maskUrl,
     addSubscription: addSubscription,
