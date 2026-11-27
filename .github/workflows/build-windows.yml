@@ -24,27 +24,11 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      - name: Download mihomo core (Windows x64)
-        run: |
-          New-Item -ItemType Directory -Force -Path core | Out-Null
-          Invoke-WebRequest -Uri "https://github.com/MetaCubeX/mihomo/releases/download/v1.19.34/mihomo-windows-amd64-v1.19.34.zip" -OutFile core.zip
-          Expand-Archive -Path core.zip -DestinationPath core-unzip -Force
-          Move-Item (Get-ChildItem core-unzip -Filter *.exe | Select-Object -First 1).FullName core/mihomo-windows-x64.exe
-          Remove-Item core.zip, core-unzip -Recurse -Force
-
       - name: Build Electron app for Windows x64 (NSIS + portable)
         env:
           CSC_LINK: ${{ secrets.WINDOWS_CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.WINDOWS_CSC_KEY_PASSWORD }}
         run: npx electron-builder --win nsis portable --x64 --publish never
-
-      - name: Download mihomo core (Windows ARM64)
-        run: |
-          Remove-Item core/* -Force
-          Invoke-WebRequest -Uri "https://github.com/MetaCubeX/mihomo/releases/download/v1.19.34/mihomo-windows-arm64-v1.19.34.zip" -OutFile core.zip
-          Expand-Archive -Path core.zip -DestinationPath core-unzip -Force
-          Move-Item (Get-ChildItem core-unzip -Filter *.exe | Select-Object -First 1).FullName core/mihomo-windows-arm64.exe
-          Remove-Item core.zip, core-unzip -Recurse -Force
 
       - name: Build Electron app for Windows ARM64 (NSIS + portable)
         env:
