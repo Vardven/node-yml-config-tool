@@ -24,10 +24,27 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      - name: Build Electron app for macOS (DMG x64 + arm64, unsigned)
+      - name: Download mihomo core (macOS x64)
+        run: |
+          mkdir -p core
+          curl -sfL "https://github.com/MetaCubeX/mihomo/releases/download/v1.19.34/mihomo-darwin-amd64-v1.19.34.gz" | gunzip > core/mihomo-darwin-x64
+          chmod +x core/mihomo-darwin-x64
+
+      - name: Build Electron app for macOS x64 (DMG, unsigned)
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
-        run: npx electron-builder --mac dmg --x64 --arm64 --publish never
+        run: npx electron-builder --mac dmg --x64 --publish never
+
+      - name: Download mihomo core (macOS arm64)
+        run: |
+          rm -f core/*
+          curl -sfL "https://github.com/MetaCubeX/mihomo/releases/download/v1.19.34/mihomo-darwin-arm64-v1.19.34.gz" | gunzip > core/mihomo-darwin-arm64
+          chmod +x core/mihomo-darwin-arm64
+
+      - name: Build Electron app for macOS arm64 (DMG, unsigned)
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        run: npx electron-builder --mac dmg --arm64 --publish never
 
       - name: Upload DMG artifacts
         uses: actions/upload-artifact@v4
