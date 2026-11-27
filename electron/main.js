@@ -31,11 +31,13 @@ ipcMain.handle('download-update', async (event, url, filename) => {
     event.sender.send('update-progress', total > 0 ? Math.floor((got / total) * 100) : -1);
   }
   await new Promise((resolve, reject) => { file.end((err) => (err ? reject(err) : resolve())); });
-  if (process.platform === 'win32' && /setup\.exe$/i.test(safe)) {
-    // 安装版以管理员方式启动安装程序：应用本身不是管理员启动时，
-    // 普通打开安装程序会因没权限写入安装目录 / 结束旧进程而失败（或卡在「无法关闭本应用」）。
-    launchElevated(dest);
-    setTimeout(() => app.quit(), 1500);
+  if (process.platform === 'win32' && safe.endsWith('.exe')) {
+    // 安装程序延迟约 2 秒再启动、本应用先退出：否则安装程序启动太快、
+    // 本应用还没退干净时它去结束进程会失败，弹「无法关闭本应用」让用户手动关。
+    // 安装版（setup）同时提权：应用本身不是管理员启动时，安装程序以管理员方式
+    // 拉起（弹 UAC），保证有权限写入安装目录；免安装版只延迟普通启动。
+    launchInstaller(dest, /setup\.exe$/i.test(safe));
+    setTimeout(() => app.quit(), 800);
   } else {
     await shell.openPath(dest);
     if (safe.endsWith('.exe')) setTimeout(() => app.quit(), 1500);
@@ -43,12 +45,26 @@ ipcMain.handle('download-update', async (event, url, filename) => {
   return { ok: true };
 });
 
-// 通过 PowerShell 的 Start-Process -Verb RunAs 拉起 UAC 提权启动；失败时退回普通打开
-function launchElevated(filePath) {
+// 延迟启动安装程序（与本应用进程脱离，本应用退出后它仍会执行）；
+// elevate=true 时经 PowerShell 的 Start-Process -Verb RunAs 提权，失败逐级退回普通延迟启动 / 直接打开
+function launchInstaller(filePath, elevate) {
+  if (!elevate) { launchDelayedPlain(filePath); return; }
   try {
     const { spawn } = require('child_process');
     const psPath = "'" + String(filePath).replace(/'/g, "''") + "'";
-    const child = spawn('powershell.exe', ['-NoProfile', '-Command', 'Start-Process -FilePath ' + psPath + ' -Verb RunAs'], { detached: true, stdio: 'ignore', windowsHide: true });
+    const child = spawn('powershell.exe', ['-NoProfile', '-Command', 'Start-Sleep -Seconds 2; Start-Process -FilePath ' + psPath + ' -Verb RunAs'], { detached: true, stdio: 'ignore', windowsHide: true });
+    child.on('error', () => { launchDelayedPlain(filePath); });
+    child.unref();
+  } catch (e) {
+    launchDelayedPlain(filePath);
+  }
+}
+
+// 用 cmd + ping 做约 2 秒延迟后普通启动（timeout 命令在输入被重定向时会报错，故用 ping 计时）
+function launchDelayedPlain(filePath) {
+  try {
+    const { spawn } = require('child_process');
+    const child = spawn('cmd.exe', ['/c', 'ping -n 3 127.0.0.1 >nul & start "" "' + String(filePath) + '"'], { detached: true, stdio: 'ignore', windowsHide: true });
     child.on('error', () => { shell.openPath(filePath); });
     child.unref();
   } catch (e) {
