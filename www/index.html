@@ -39,6 +39,12 @@
         <option>hysteria2</option><option>tuic</option><option>anytls</option><option>ss</option>
       </select>
     </div>
+    <div class="row" id="batch-row">
+      <button id="batch-all-btn">全选</button>
+      <button id="batch-none-btn">全不选</button>
+      <button id="batch-del-btn" class="danger" hidden>删除选中</button>
+      <span id="batch-info" class="hint"></span>
+    </div>
     <p id="node-count" class="hint"></p>
     <div id="node-empty" class="empty">还没有任何节点。去「添加节点」粘贴一条分享链接，或手动填写参数添加你的第一个节点。</div>
     <div id="node-list"></div>
@@ -122,7 +128,8 @@
     <label>把订阅返回的 base64 内容粘贴到这里，会自动解码并解析成单个节点导入；也可以粘贴订阅链接，点「解析订阅」拉取订阅里的节点来挑选</label>
     <textarea id="sub-content" rows="6" placeholder="粘贴订阅内容…"></textarea>
     <div class="row">
-      <input id="sub-content-group" placeholder="导入到分组，留空用「全部节点」">
+      <select id="sub-content-group"></select>
+      <input id="sub-content-group-new" placeholder="新分组名" hidden>
       <button id="import-content-btn" class="primary">导入为节点</button>
       <button id="parse-sub-btn">解析订阅</button>
     </div>
@@ -198,7 +205,7 @@
     </div>
     <div class="card">
       <h3>检查更新</h3>
-      <p>当前版本：<span id="app-version">v1.0.17</span></p>
+      <p>当前版本：<span id="app-version">v1.0.18</span></p>
       <div class="row">
         <button id="check-update-btn">检查更新</button>
       </div>
@@ -240,6 +247,7 @@
 </div>
 
 <footer><p class="hint">数据保存在浏览器 localStorage 中，只在这台设备上。换设备请用「导出数据备份」迁移。</p></footer>
+<button id="back-top" title="回到顶部" hidden>↑</button>
 <script src="js/i18n.js"></script>
 <script src="js/core.js"></script>
 <script src="js/app.js"></script>

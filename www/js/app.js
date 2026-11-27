@@ -106,6 +106,19 @@
       return true;
     });
   }
+  var selectedNodeIds = {};
+  function updateBatchBar() {
+    var ids = Object.keys(selectedNodeIds).filter(function (id) {
+      return state.nodes.some(function (n) { return n.id === id; });
+    });
+    selectedNodeIds = {};
+    ids.forEach(function (id) { selectedNodeIds[id] = true; });
+    var n = ids.length;
+    var delBtn = $('batch-del-btn');
+    if (delBtn) { delBtn.hidden = n === 0; delBtn.textContent = t('删除选中') + (n ? '（' + n + '）' : ''); }
+    var info = $('batch-info');
+    if (info) info.textContent = n ? t('已选 {0} 个', n) : '';
+  }
   function renderNodes() {
     var list = filteredNodeList();
     $('node-count').textContent = t('共 {0} 个节点', state.nodes.length) + (list.length !== state.nodes.length ? t('，筛选后 {0} 个', list.length) : '');
@@ -114,7 +127,7 @@
       var name = Core.buildNodeName(n);
       var badges = '<span class="badge">' + esc(n.type) + '</span>';
       return '<div class="card">' +
-        '<div class="card-head"><strong>' + esc(name) + '</strong><span class="badges">' + badges + '</span></div>' +
+        '<div class="card-head"><input type="checkbox" class="node-check" data-id="' + n.id + '"' + (selectedNodeIds[n.id] ? ' checked' : '') + '><strong>' + esc(name) + '</strong><span class="badges">' + badges + '</span></div>' +
         '<pre class="yaml">' + esc(Core.nodeYaml(n)) + '</pre>' +
         '<div class="row">' +
         '<button data-act="link" data-id="' + n.id + '">复制链接</button>' +
@@ -127,6 +140,30 @@
     $('node-group-filter').innerHTML = '<option value="">全部分组</option>' + Core.listGroups(state).map(function (g) {
       return '<option value="' + esc(g.name) + '"' + (g.name === cur ? ' selected' : '') + '>' + esc(g.name) + '</option>';
     }).join('');
+    updateBatchBar();
+    renderSubGroupSelect();
+  }
+  // 订阅导入的目标分组：下拉选已有分组，或选「新建分组…」后填新名
+  function renderSubGroupSelect() {
+    var sel = $('sub-content-group');
+    if (!sel) return;
+    var cur = sel.value;
+    var names = Core.listGroups(state).map(function (g) { return g.name; });
+    sel.innerHTML = names.map(function (n) {
+      return '<option value="' + esc(n) + '"' + (n === cur ? ' selected' : '') + '>' + esc(n) + '</option>';
+    }).join('') + '<option value="__new__"' + (cur === '__new__' ? ' selected' : '') + '>＋ ' + t('新建分组…') + '</option>';
+    if (cur && cur !== '__new__' && names.indexOf(cur) === -1) sel.value = Core.ALL_GROUP;
+    var nw = $('sub-content-group-new');
+    if (nw) nw.hidden = sel.value !== '__new__';
+  }
+  function importTargetGroup() {
+    var sel = $('sub-content-group');
+    if (!sel) return Core.ALL_GROUP;
+    if (sel.value === '__new__') {
+      var v = $('sub-content-group-new').value.trim();
+      return v || Core.ALL_GROUP;
+    }
+    return sel.value || Core.ALL_GROUP;
   }
 
   // ---------------------------------------------------------------- 分组
@@ -340,13 +377,14 @@
   }
   // 把候选节点批量写入（批量粘贴链接 / 导入订阅内容共用）
   function importCandidates(cands, parseErrs, out) {
-    var added = 0, skipped = (parseErrs || []).slice();
+    var added = 0, dupCount = 0, skipped = (parseErrs || []).slice();
     cands.forEach(function (c) {
       var res = Core.addNode(state, { groupName: c.groupName || Core.ALL_GROUP, location: c.location || t('未知'), type: c.type, server: c.server, port: c.port, details: c.details });
-      if (res.ok) added++; else skipped.push(res.error);
+      if (res.ok) added++; else if (res.dup) dupCount++; else skipped.push(res.error);
     });
     save(); renderAll();
     var m = t('导入完成：成功 {0} 条', added);
+    if (dupCount) m += t('，{0} 个节点重复没有导入', dupCount);
     if (skipped.length) m += t('，跳过 {0} 条（{1}）', skipped.length, skipped[0]);
     msg(out, m, added > 0);
   }
@@ -392,6 +430,8 @@
       var others = state.nodes.filter(function (n) { return n.id !== editingNodeId; });
       var dup = others.some(function (n) { return Core.buildNodeName(n) === Core.buildNodeName(node); });
       if (dup) { msg(out, t('节点名重复：{0}', Core.buildNodeName(node)), false); return; }
+      var idDup = others.some(function (n) { return n.groupName === node.groupName && Core.nodeIdentity(n) === Core.nodeIdentity(node); });
+      if (idDup) { msg(out, t('节点重复：该分组里已有相同节点'), false); return; }
       node.id = editingNodeId;
       state.nodes[idx] = node;
       if (state.groups.indexOf(node.groupName) === -1) state.groups.push(node.groupName);
@@ -465,6 +505,37 @@
       msg($('rule-msg'), t('已恢复默认规则'), true);
     });
     $('node-search').addEventListener('input', renderNodes);
+    $('node-list').addEventListener('change', function (e) {
+      var cb = e.target.closest('.node-check');
+      if (!cb) return;
+      if (cb.checked) selectedNodeIds[cb.dataset.id] = true; else delete selectedNodeIds[cb.dataset.id];
+      updateBatchBar();
+    });
+    $('batch-all-btn').addEventListener('click', function () {
+      filteredNodeList().forEach(function (n) { selectedNodeIds[n.id] = true; });
+      renderNodes();
+    });
+    $('batch-none-btn').addEventListener('click', function () { selectedNodeIds = {}; renderNodes(); });
+    $('batch-del-btn').addEventListener('click', function () {
+      var ids = Object.keys(selectedNodeIds);
+      if (!ids.length) return;
+      if (!confirm(t('删除选中的 {0} 个节点？', ids.length))) return;
+      var set = {};
+      ids.forEach(function (id) { set[id] = true; });
+      state.nodes = state.nodes.filter(function (n) { return !set[n.id]; });
+      selectedNodeIds = {};
+      save(); renderAll();
+      toast(t('已删除 {0} 个节点', ids.length), true);
+    });
+    $('sub-content-group').addEventListener('change', function () {
+      var nw = $('sub-content-group-new');
+      if (nw) { nw.hidden = $('sub-content-group').value !== '__new__'; if (!nw.hidden) nw.focus(); }
+    });
+    var backTop = $('back-top');
+    if (backTop) {
+      window.addEventListener('scroll', function () { backTop.hidden = window.scrollY < 600; }, { passive: true });
+      backTop.addEventListener('click', function () { window.scrollTo({ top: 0, behavior: 'smooth' }); });
+    }
     $('node-group-filter').addEventListener('change', renderNodes);
     $('node-type-filter').addEventListener('change', renderNodes);
     $('node-list').addEventListener('click', function (e) {
@@ -637,7 +708,7 @@
       var out = $('sub-msg');
       var text = $('sub-content').value;
       if (!text.trim()) { msg(out, '请先粘贴要导入的内容', false); return; }
-      var target = $('sub-content-group').value.trim() || Core.ALL_GROUP;
+      var target = importTargetGroup();
       var built = buildCandidates(text, target);
       if (!built.cands.length) { msg(out, t('没有从内容里解析出任何节点'), false); return; }
       $('sub-content').value = '';
@@ -692,7 +763,7 @@
       var out = $('sub-msg');
       var text = $('sub-content').value;
       if (!text.trim()) { msg(out, '请先粘贴要导入的内容', false); return; }
-      var target = $('sub-content-group').value.trim() || Core.ALL_GROUP;
+      var target = importTargetGroup();
       function useContent(content) {
         var built = buildCandidates(content, target);
         if (!built.cands.length) { msg(out, t('没有从内容里解析出任何节点'), false); return; }
@@ -760,7 +831,7 @@
   }
 
   // ---------------------------------------------------------------- 更新检测
-  var APP_VERSION = '1.0.17';
+  var APP_VERSION = '1.0.18';
   var LATEST_API = 'https://api.github.com/repos/Vardven/node-yml-config-tool/releases/latest';
   var updateReleaseUrl = 'https://github.com/Vardven/node-yml-config-tool/releases/latest';
   var latestRelease = null;

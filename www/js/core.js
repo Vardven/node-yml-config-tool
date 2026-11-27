@@ -562,8 +562,22 @@
     return { ok: true, moved: moved, skipped: skipped };
   }
 
+  // 节点身份：同分组内判断「相同节点」用——类型+地址+端口+账号凭据+传输方式，
+  // 与显示名无关（同一节点换个地点名/备注导入，也算重复，不重复导入）
+  function nodeIdentity(node) {
+    var d = node.details || {};
+    var cred = d.uuid || d.password || d.auth || '';
+    if (node.type === 'ss') cred = (d.method || '') + ':' + cred;
+    if (node.type === 'tuic') cred = (d.uuid || '') + ':' + (d.password || '');
+    return [node.type, String(node.server || '').toLowerCase(), node.port || '', cred, d.network || ''].join('|');
+  }
   function addNode(state, node) {
     node.name = buildNodeName(node);
+    var idkey = nodeIdentity(node);
+    var isDup = state.nodes.some(function (n) { return n.groupName === node.groupName && nodeIdentity(n) === idkey; });
+    if (isDup) {
+      return { ok: false, dup: true, error: ct('节点重复：{0} 已在该分组中', node.name) };
+    }
     if (state.nodes.some(function (n) { return buildNodeName(n) === node.name; })) {
       return { ok: false, error: ct('节点名重复：{0}（同分组同地址同端口时，请加第 5 段后缀区分）', node.name) };
     }
@@ -1044,6 +1058,7 @@
     deleteGroup: deleteGroup,
     moveGroupNodes: moveGroupNodes,
     addNode: addNode,
+    nodeIdentity: nodeIdentity,
     autoSubName: autoSubName,
     maskUrl: maskUrl,
     addSubscription: addSubscription,
