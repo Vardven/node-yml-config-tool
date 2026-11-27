@@ -898,7 +898,7 @@
   }
 
   // ---------------------------------------------------------------- 更新检测
-  var APP_VERSION = '1.0.20';
+  var APP_VERSION = '1.0.21';
   var LATEST_API = 'https://api.github.com/repos/Vardven/node-yml-config-tool/releases/latest';
   var updateReleaseUrl = 'https://github.com/Vardven/node-yml-config-tool/releases/latest';
   var latestRelease = null;
@@ -1009,6 +1009,19 @@
   }
 
   function b64utf8(s) { return btoa(unescape(encodeURIComponent(s))); }
+  // 兜底保存：写缓存文件后调系统分享面板（可从面板里存到文件/发给其它应用）
+  function shareDownload(filename, text) {
+    var cap = window.Capacitor;
+    var fs = cap.Plugins.Filesystem;
+    var share = cap.Plugins.Share;
+    fs.writeFile({ path: filename, data: text, directory: 'CACHE', encoding: 'utf8' })
+      .then(function () { return fs.getUri({ path: filename, directory: 'CACHE' }); })
+      .then(function (r) { return share.share({ title: filename, url: r.uri }); })
+      .catch(function () {
+        var em = $('export-msg');
+        if (em) msg(em, '保存失败，请改用「复制 YAML」', false);
+      });
+  }
   function download(filename, text, type) {
     // 安卓 App（Capacitor 的 WebView）不处理 blob 链接下载，点了没反应；
     // 原生环境优先走系统「另存为」对话框（SaveAs 插件 / SAF）：用户在文件管理器里自己选保存位置；
@@ -1022,24 +1035,19 @@
             var em = $('export-msg');
             if (em) msg(em, t('文件已保存'), true);
           })
-          .catch(function () {
-            var em = $('export-msg');
-            if (em) msg(em, t('已取消保存'), false);
+          .catch(function (e) {
+            // 只有用户在系统对话框里主动取消才算取消；其它失败（写入出错、进程被回收等）
+            // 自动退回分享保存，别让导出的内容丢了
+            if (e && /cancel/i.test(e.message || '')) {
+              var em = $('export-msg');
+              if (em) msg(em, t('已取消保存'), false);
+              return;
+            }
+            shareDownload(filename, text);
           });
         return;
       }
-      if (cap.Plugins.Filesystem && cap.Plugins.Share) {
-        var fs = cap.Plugins.Filesystem;
-        var share = cap.Plugins.Share;
-        fs.writeFile({ path: filename, data: text, directory: 'CACHE', encoding: 'utf8' })
-          .then(function () { return fs.getUri({ path: filename, directory: 'CACHE' }); })
-          .then(function (r) { return share.share({ title: filename, url: r.uri }); })
-          .catch(function () {
-            var em = $('export-msg');
-            if (em) msg(em, '保存失败，请改用「复制 YAML」', false);
-          });
-        return;
-      }
+      if (cap.Plugins.Filesystem && cap.Plugins.Share) { shareDownload(filename, text); return; }
     }
     var blob = new Blob([text], { type: type || 'text/plain' });
     var a = document.createElement('a');
