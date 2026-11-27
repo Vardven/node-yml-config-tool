@@ -23,6 +23,8 @@
     // 旧版内置「默认」分组改为内置策略组「全部节点」
     s.groups = (s.groups || []).filter(function (g) { return g !== '默认' && g !== Core.ALL_GROUP; });
     s.nodes.forEach(function (n) { if (n.groupName === '默认') n.groupName = Core.ALL_GROUP; });
+    if (!s.settings || typeof s.settings !== 'object') s.settings = {};
+    if (!s.settings.testUrl) s.settings.testUrl = Core.DEFAULT_TEST_URL;
     if (!Array.isArray(s.rules)) { s.rules = Core.defaultRules(); return s; }
     // 内置（默认）规则完全锁定：每次加载都按类型+值与出厂默认对齐——
     // 目标/no-resolve 被旧版本改过的强制改回（如 cn_ip 被改成香港节点组），缺失的默认规则按规范位置补回；
@@ -94,34 +96,195 @@
   function applyI18n(root) { if (window.i18nApply) window.i18nApply(root || document.body); }
 
   // ---------------------------------------------------------------- 节点列表
-  function renderNodes() {
+  function filteredNodeList() {
     var q = $('node-search').value.trim().toLowerCase();
     var gf = $('node-group-filter').value;
     var tf = $('node-type-filter').value;
-    var list = state.nodes.filter(function (n) {
+    return state.nodes.filter(function (n) {
       if (gf && n.groupName !== gf) return false;
       if (tf && n.type !== tf) return false;
       if (q && (Core.buildNodeName(n) + ' ' + n.server).toLowerCase().indexOf(q) === -1) return false;
       return true;
     });
+  }
+  function renderNodes() {
+    var list = filteredNodeList();
     $('node-count').textContent = t('共 {0} 个节点', state.nodes.length) + (list.length !== state.nodes.length ? t('，筛选后 {0} 个', list.length) : '');
     $('node-empty').style.display = state.nodes.length ? 'none' : 'block';
     $('node-list').innerHTML = list.map(function (n) {
       var name = Core.buildNodeName(n);
+      var badges = '<span class="badge">' + esc(n.type) + '</span>';
+      if (testingIds[n.id]) {
+        badges += '<span class="badge ping testing">测试中…</span>';
+      } else if (n.test) {
+        if (n.test.ok) badges += '<span class="badge ping ' + (n.test.delay < 300 ? 'ok' : (n.test.delay < 800 ? 'warn' : 'slow')) + '">' + n.test.delay + 'ms</span>';
+        else badges += '<span class="badge ping bad">不通</span>';
+        if (n.test.country) badges += '<span class="badge country">' + esc(n.test.country) + '</span>';
+      }
       return '<div class="card">' +
-        '<div class="card-head"><strong>' + esc(name) + '</strong><span class="badge">' + esc(n.type) + '</span></div>' +
+        '<div class="card-head"><strong>' + esc(name) + '</strong><span class="badges">' + badges + '</span></div>' +
         '<pre class="yaml">' + esc(Core.nodeYaml(n)) + '</pre>' +
         '<div class="row">' +
         '<button data-act="link" data-id="' + n.id + '">复制链接</button>' +
+        '<button data-act="test" data-id="' + n.id + '">测速</button>' +
         '<button data-act="edit" data-id="' + n.id + '">编辑</button>' +
         '<button data-act="del" data-id="' + n.id + '" class="danger">删除</button>' +
         '</div></div>';
     }).join('');
+    var deadCount = state.nodes.filter(function (n) { return n.test && !n.test.ok; }).length;
+    var ddBtn = $('del-dead-btn');
+    if (ddBtn) {
+      ddBtn.hidden = deadCount === 0;
+      ddBtn.textContent = t('删除不通节点') + '（' + deadCount + '）';
+    }
     // 分组筛选下拉
     var cur = $('node-group-filter').value;
     $('node-group-filter').innerHTML = '<option value="">全部分组</option>' + Core.listGroups(state).map(function (g) {
       return '<option value="' + esc(g.name) + '"' + (g.name === cur ? ' selected' : '') + '>' + esc(g.name) + '</option>';
     }).join('');
+  }
+
+  // ---------------------------------------------------------------- 节点测速（内置 mihomo 内核）
+  var testingIds = {};
+  var testRunning = false;
+  var coreSession = null;
+
+  function nativeBridge() {
+    if (window.CoreBridge && window.CoreBridge.startCore) return window.CoreBridge;
+    var cap = window.Capacitor;
+    if (cap && typeof cap.isNativePlatform === 'function' && cap.isNativePlatform() && cap.Plugins && cap.Plugins.AppTools) return cap.Plugins.AppTools;
+    return null;
+  }
+  function testUrl() { return (state.settings && state.settings.testUrl) || Core.DEFAULT_TEST_URL; }
+  function startCoreFor(nodes) {
+    var bridge = nativeBridge();
+    if (!bridge) return Promise.reject(new Error('nobridge'));
+    var mixedPort = 17000 + Math.floor(Math.random() * 1500);
+    var apiPort = mixedPort + 1000;
+    var cfg = Core.buildTestConfig(nodes, mixedPort, apiPort);
+    return bridge.startCore({ config: cfg, apiPort: apiPort, mixedPort: mixedPort }).then(function () {
+      coreSession = { bridge: bridge, apiBase: 'http://127.0.0.1:' + apiPort, mixedPort: mixedPort };
+      return coreSession;
+    });
+  }
+  function stopCore() {
+    if (coreSession && coreSession.bridge.stopCore) {
+      try { var p = coreSession.bridge.stopCore({}); if (p && p.catch) p.catch(function () {}); } catch (e) { /* 忽略 */ }
+    }
+    coreSession = null;
+  }
+  function apiDelay(session, node) {
+    var url = session.apiBase + '/proxies/' + encodeURIComponent(Core.buildNodeName(node)) + '/delay?timeout=6000&url=' + encodeURIComponent(testUrl());
+    return fetch(url).then(function (r) {
+      if (!r.ok) throw new Error('dead');
+      return r.json();
+    }).then(function (d) {
+      if (!d || typeof d.delay !== 'number') throw new Error('dead');
+      return d.delay;
+    });
+  }
+  function apiSelect(session, node) {
+    return fetch(session.apiBase + '/proxies/' + Core.TEST_GROUP, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: Core.buildNodeName(node) })
+    });
+  }
+  function fetchCountry(session) {
+    return session.bridge.fetchViaProxy({ port: session.mixedPort, url: 'https://www.cloudflare.com/cdn-cgi/trace' }).then(function (r) {
+      var loc = Core.parseTraceLoc(r && r.text);
+      return loc ? Core.countryByCode(loc) : null;
+    }).catch(function () { return null; });
+  }
+  function testNodeWith(session, node) {
+    return apiDelay(session, node).then(function (delay) {
+      node.test = { ok: true, delay: delay, at: Date.now() };
+      return apiSelect(session, node).then(function () { return fetchCountry(session); }).then(function (c) {
+        if (c) node.test.country = (c.flag ? c.flag + ' ' : '') + c.loc;
+        return node.test;
+      });
+    }, function () {
+      node.test = { ok: false, at: Date.now() };
+      return node.test;
+    });
+  }
+  function testOne(node) {
+    if (testRunning) return;
+    if (!nativeBridge()) { toast(t('网页版无法测速，请使用 Windows / macOS / Android 版（内置 mihomo 内核）'), false); return; }
+    testRunning = true; testingIds[node.id] = true; renderNodes();
+    startCoreFor(state.nodes).then(function (session) {
+      return testNodeWith(session, node);
+    }).then(function () {
+      if (node.test && node.test.ok) toast(t('测速完成：{0}ms', node.test.delay), true);
+      else toast(t('该节点不通'), false);
+    }).catch(function () {
+      toast(t('测速失败：内核启动失败'), false);
+    }).then(function () {
+      stopCore(); testRunning = false; delete testingIds[node.id]; save(); renderNodes();
+    });
+  }
+  function testAll() {
+    if (testRunning) return;
+    if (!nativeBridge()) { toast(t('网页版无法测速，请使用 Windows / macOS / Android 版（内置 mihomo 内核）'), false); return; }
+    var list = filteredNodeList();
+    if (!list.length) { toast(t('没有可测速的节点'), false); return; }
+    testRunning = true;
+    list.forEach(function (n) { testingIds[n.id] = true; });
+    renderNodes();
+    var status = $('test-status');
+    var done = 0;
+    function progress() { if (status) status.textContent = t('测速中 {0}/{1}', done, list.length); }
+    progress();
+    var aliveCount = 0;
+    startCoreFor(state.nodes).then(function (session) {
+      var queue = list.slice();
+      function worker() {
+        var n = queue.shift();
+        if (!n) return Promise.resolve();
+        return apiDelay(session, n).then(function (delay) {
+          n.test = { ok: true, delay: delay, at: Date.now() };
+        }, function () {
+          n.test = { ok: false, at: Date.now() };
+        }).then(function () {
+          done++; progress();
+          delete testingIds[n.id]; renderNodes();
+          return worker();
+        });
+      }
+      var workers = [];
+      for (var i = 0; i < Math.min(6, list.length); i++) workers.push(worker());
+      return Promise.all(workers).then(function () { return session; });
+    }).then(function (session) {
+      var aliveNodes = list.filter(function (n) { return n.test && n.test.ok; });
+      aliveCount = aliveNodes.length;
+      var chain = Promise.resolve();
+      aliveNodes.forEach(function (n) {
+        chain = chain.then(function () {
+          return apiSelect(session, n).then(function () { return fetchCountry(session); }).then(function (c) {
+            if (c) { n.test.country = (c.flag ? c.flag + ' ' : '') + c.loc; renderNodes(); }
+          });
+        });
+      });
+      return chain;
+    }).then(function () {
+      var dead = list.filter(function (n) { return n.test && !n.test.ok; }).length;
+      toast(t('测速完成：可用 {0} · 不通 {1}', aliveCount, dead), true);
+    }).catch(function () {
+      toast(t('测速失败：内核启动失败'), false);
+    }).then(function () {
+      stopCore(); testRunning = false; testingIds = {};
+      if (status) status.textContent = '';
+      save(); renderNodes();
+    });
+  }
+  function deleteDead() {
+    var dead = state.nodes.filter(function (n) { return n.test && !n.test.ok; });
+    if (!dead.length) return;
+    if (!confirm(t('删除 {0} 个不通节点？', dead.length))) return;
+    var ids = {};
+    dead.forEach(function (n) { ids[n.id] = true; });
+    state.nodes = state.nodes.filter(function (n) { return !ids[n.id]; });
+    save(); renderAll();
+    toast(t('已删除 {0} 个不通节点', dead.length), true);
   }
 
   // ---------------------------------------------------------------- 分组
@@ -425,6 +588,7 @@
       document.body.classList.add('settings-open');
       $('settings-btn').classList.add('active');
       $('tab-about').classList.add('active');
+      if ($('set-test-url')) $('set-test-url').value = testUrl();
     });
 
     $('rule-list').addEventListener('change', function (e) {
@@ -460,6 +624,8 @@
       msg($('rule-msg'), t('已恢复默认规则'), true);
     });
     $('node-search').addEventListener('input', renderNodes);
+    $('test-all-btn').addEventListener('click', testAll);
+    $('del-dead-btn').addEventListener('click', deleteDead);
     $('node-group-filter').addEventListener('change', renderNodes);
     $('node-type-filter').addEventListener('change', renderNodes);
     $('node-list').addEventListener('click', function (e) {
@@ -473,6 +639,7 @@
         setTimeout(function () { btn.textContent = oldTxt; }, 1200);
         return;
       }
+      if (btn.dataset.act === 'test') { testOne(node); return; }
       if (btn.dataset.act === 'del') {
         if (confirm(t('删除节点 {0}？', Core.buildNodeName(node)))) {
           state.nodes = state.nodes.filter(function (n) { return n.id !== id; });
@@ -749,18 +916,34 @@
       });
     }
 
+    // 测速设置：测速链接可改（测延迟时内核访问的地址），保存到 state.settings.testUrl
+    if ($('set-test-url')) {
+      $('set-test-url-save').addEventListener('click', function () {
+        var v = $('set-test-url').value.trim();
+        if (!/^https?:\/\//i.test(v)) { toast(t('测速链接格式不对'), false); return; }
+        if (!state.settings) state.settings = {};
+        state.settings.testUrl = v; save();
+        toast(t('已保存'), true);
+      });
+      $('set-test-url-reset').addEventListener('click', function () {
+        if (!state.settings) state.settings = {};
+        state.settings.testUrl = Core.DEFAULT_TEST_URL;
+        $('set-test-url').value = Core.DEFAULT_TEST_URL; save();
+        toast(t('已恢复默认测速链接'), true);
+      });
+    }
+
     $('check-update-btn').addEventListener('click', function () { checkForUpdates(true); });
-    $('update-now-btn').addEventListener('click', function () {
-      $('update-modal').hidden = true;
-      window.open(updateReleaseUrl, '_blank');
-    });
+    $('update-now-btn').addEventListener('click', function () { startInAppUpdate(); });
     $('update-later-btn').addEventListener('click', function () { $('update-modal').hidden = true; });
   }
 
   // ---------------------------------------------------------------- 更新检测
-  var APP_VERSION = '1.0.14';
+  var APP_VERSION = '1.0.15';
   var LATEST_API = 'https://api.github.com/repos/Vardven/node-yml-config-tool/releases/latest';
   var updateReleaseUrl = 'https://github.com/Vardven/node-yml-config-tool/releases/latest';
+  var latestRelease = null;
+  var updating = false;
 
   function isNewerVersion(latest, current) {
     var a = latest.split('.').map(function (x) { return parseInt(x, 10) || 0; });
@@ -780,9 +963,10 @@
       .then(function (d) {
         var latest = String(d.tag_name || '').replace(/^v/i, '');
         if (latest && isNewerVersion(latest, APP_VERSION)) {
+          latestRelease = d;
           updateReleaseUrl = d.html_url || updateReleaseUrl;
           $('update-title').textContent = t('发现新版本 v{0}', latest);
-          $('update-desc').textContent = t('当前版本 v{0}，最新版本 v{1}。点「立即更新」打开下载页，下载新版本安装即可。', APP_VERSION, latest);
+          $('update-desc').textContent = t('当前版本 v{0}，最新版本 v{1}。点「立即更新」将直接在软件内下载并安装。', APP_VERSION, latest);
           $('update-modal').hidden = false;
           applyI18n($('update-modal'));
           if (manual && out) msg(out, t('发现新版本 v{0}', latest), true);
@@ -793,6 +977,76 @@
       .catch(function () {
         if (manual && out) msg(out, '检查更新失败，请检查网络后重试', false);
       });
+  }
+
+  // 软件内更新：优先在应用内下载安装包并调起系统安装程序；任何一步做不到才打开下载页。
+  function startInAppUpdate() {
+    if (updating) return;
+    var assets = (latestRelease && latestRelease.assets) || [];
+    function findAsset(pred) {
+      for (var i = 0; i < assets.length; i++) { if (pred(assets[i].name)) return assets[i]; }
+      return null;
+    }
+    function setDesc(s) { $('update-desc').textContent = s; }
+    function fallback() {
+      updating = false;
+      $('update-now-btn').disabled = false;
+      $('update-modal').hidden = true;
+      toast(t('软件内更新失败，已打开下载页'), false);
+      window.open(updateReleaseUrl, '_blank');
+    }
+    // 桌面版（Electron）：主进程下载安装包到临时目录并打开安装程序
+    if (window.nativeUpdate && window.nativePlatform) {
+      var pf = window.nativePlatform;
+      var asset = null;
+      if (pf.platform === 'win32') {
+        asset = findAsset(function (n) { return n.slice(-(pf.arch + '-setup.exe').length) === pf.arch + '-setup.exe'; }) ||
+          findAsset(function (n) { return n.slice(-(pf.arch + '-portable.exe').length) === pf.arch + '-portable.exe'; });
+      } else if (pf.platform === 'darwin') {
+        asset = findAsset(function (n) { return n.slice(-4) === '.dmg' && n.indexOf(pf.arch) !== -1; });
+      }
+      if (asset) {
+        updating = true;
+        $('update-now-btn').disabled = true;
+        setDesc(t('正在下载更新…'));
+        if (window.onUpdateProgress) window.onUpdateProgress(function (pct) {
+          if (pct >= 0) setDesc(t('正在下载更新…{0}%', pct));
+        });
+        window.nativeUpdate(asset.browser_download_url, asset.name).then(function () {
+          updating = false;
+          $('update-now-btn').disabled = false;
+          setDesc(t('下载完成，正在打开安装程序…'));
+        }).catch(function () { fallback(); });
+        return;
+      }
+    }
+    // 安卓版：按 CPU 架构选对应的 APK，原生下载到缓存后调起系统安装器
+    var cap = window.Capacitor;
+    if (cap && typeof cap.isNativePlatform === 'function' && cap.isNativePlatform() && cap.Plugins && cap.Plugins.AppTools && cap.Plugins.Filesystem) {
+      updating = true;
+      $('update-now-btn').disabled = true;
+      setDesc(t('正在下载更新…'));
+      cap.Plugins.AppTools.deviceInfo().then(function (info) {
+        var abi = info && info.abis && info.abis[0];
+        var apkName = abi === 'arm64-v8a' ? 'app-arm64-v8a-release.apk'
+          : abi === 'armeabi-v7a' ? 'app-armeabi-v7a-release.apk'
+          : abi === 'x86_64' ? 'app-x86_64-release.apk' : 'app-release.apk';
+        var asset = findAsset(function (n) { return n === apkName; }) || findAsset(function (n) { return n === 'app-release.apk'; });
+        if (!asset) throw new Error('noasset');
+        return cap.Plugins.Filesystem.downloadFile({ url: asset.browser_download_url, path: 'update.apk', directory: 'CACHE' });
+      }).then(function () {
+        return cap.Plugins.AppTools.installApk({ path: 'update.apk' });
+      }).then(function (res) {
+        updating = false;
+        $('update-now-btn').disabled = false;
+        if (res && res.needsPermission) setDesc(t('需要允许「安装未知应用」：已打开系统设置，允许后请重新点「立即更新」'));
+        else setDesc(t('已打开安装程序，请按系统提示完成更新'));
+      }).catch(function () { fallback(); });
+      return;
+    }
+    // 网页版或找不到对应安装包：打开下载页
+    $('update-modal').hidden = true;
+    window.open(updateReleaseUrl, '_blank');
   }
 
   function b64utf8(s) { return btoa(unescape(encodeURIComponent(s))); }

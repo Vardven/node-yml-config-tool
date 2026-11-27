@@ -1,0 +1,1 @@
+{"capacitor":{"android":{"src":"android"}},"description":"Local Capacitor plugin: run the bundled mihomo core for node latency tests, fetch through it, and install downloaded APK updates (in-app update).","files":["android/","index.js"],"license":"CC-BY-NC-SA-4.0","main":"index.js","name":"capacitor-apptools","version":"1.0.0"}
