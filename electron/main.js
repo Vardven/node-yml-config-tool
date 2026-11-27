@@ -31,10 +31,30 @@ ipcMain.handle('download-update', async (event, url, filename) => {
     event.sender.send('update-progress', total > 0 ? Math.floor((got / total) * 100) : -1);
   }
   await new Promise((resolve, reject) => { file.end((err) => (err ? reject(err) : resolve())); });
-  await shell.openPath(dest);
-  if (safe.endsWith('.exe')) setTimeout(() => app.quit(), 1500);
+  if (process.platform === 'win32' && /setup\.exe$/i.test(safe)) {
+    // 安装版以管理员方式启动安装程序：应用本身不是管理员启动时，
+    // 普通打开安装程序会因没权限写入安装目录 / 结束旧进程而失败（或卡在「无法关闭本应用」）。
+    launchElevated(dest);
+    setTimeout(() => app.quit(), 1500);
+  } else {
+    await shell.openPath(dest);
+    if (safe.endsWith('.exe')) setTimeout(() => app.quit(), 1500);
+  }
   return { ok: true };
 });
+
+// 通过 PowerShell 的 Start-Process -Verb RunAs 拉起 UAC 提权启动；失败时退回普通打开
+function launchElevated(filePath) {
+  try {
+    const { spawn } = require('child_process');
+    const psPath = "'" + String(filePath).replace(/'/g, "''") + "'";
+    const child = spawn('powershell.exe', ['-NoProfile', '-Command', 'Start-Process -FilePath ' + psPath + ' -Verb RunAs'], { detached: true, stdio: 'ignore', windowsHide: true });
+    child.on('error', () => { shell.openPath(filePath); });
+    child.unref();
+  } catch (e) {
+    shell.openPath(filePath);
+  }
+}
 
 function createWindow() {
   const win = new BrowserWindow({

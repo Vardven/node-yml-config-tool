@@ -899,7 +899,7 @@
   }
 
   // ---------------------------------------------------------------- 更新检测
-  var APP_VERSION = '1.0.22';
+  var APP_VERSION = '1.0.23';
   var LATEST_API = 'https://api.github.com/repos/Vardven/node-yml-config-tool/releases/latest';
   var updateReleaseUrl = 'https://github.com/Vardven/node-yml-config-tool/releases/latest';
   var latestRelease = null;
@@ -1031,21 +1031,36 @@
     if (cap && typeof cap.isNativePlatform === 'function' && cap.isNativePlatform() && cap.Plugins) {
       if (cap.Plugins.SaveAs) {
         var mime = type || (filename.slice(-5) === '.json' ? 'application/json' : (filename.slice(-4) === '.txt' ? 'text/plain' : 'text/yaml'));
-        cap.Plugins.SaveAs.saveAs({ filename: filename, contentType: mime, data: b64utf8(text) })
-          .then(function () {
-            var em = $('export-msg');
-            if (em) msg(em, t('文件已保存'), true);
-          })
-          .catch(function (e) {
-            // 只有用户在系统对话框里主动取消才算取消；其它失败（写入出错、进程被回收等）
-            // 自动退回分享保存，别让导出的内容丢了
-            if (e && /cancel/i.test(e.message || '')) {
+        var payload = { filename: filename, contentType: mime, data: b64utf8(text) };
+        var safSave = function () {
+          cap.Plugins.SaveAs.saveAs(payload)
+            .then(function () {
               var em = $('export-msg');
-              if (em) msg(em, t('已取消保存'), false);
-              return;
-            }
-            shareDownload(filename, text);
-          });
+              if (em) msg(em, t('文件已保存'), true);
+            })
+            .catch(function (e) {
+              // 只有用户在系统对话框里主动取消才算取消；其它失败（写入出错、进程被回收等）
+              // 自动退回分享保存，别让导出的内容丢了
+              if (e && /cancel/i.test(e.message || '')) {
+                var em = $('export-msg');
+                if (em) msg(em, t('已取消保存'), false);
+                return;
+              }
+              shareDownload(filename, text);
+            });
+        };
+        // 首选直接存到系统「下载」文件夹：不离开应用、不弹选位置对话框，
+        // 从根上避开「选位置期间应用被系统回收 → 只剩 0 KB 空文件」；旧系统不支持时再走对话框保存
+        if (typeof cap.Plugins.SaveAs.saveToDownloads === 'function') {
+          cap.Plugins.SaveAs.saveToDownloads(payload)
+            .then(function () {
+              var em = $('export-msg');
+              if (em) msg(em, t('已保存到下载文件夹'), true);
+            })
+            .catch(function () { safSave(); });
+        } else {
+          safSave();
+        }
         return;
       }
       if (cap.Plugins.Filesystem && cap.Plugins.Share) { shareDownload(filename, text); return; }

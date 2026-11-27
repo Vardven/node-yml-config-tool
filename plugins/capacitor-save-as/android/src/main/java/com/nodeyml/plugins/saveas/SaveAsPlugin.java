@@ -1,10 +1,15 @@
 package com.nodeyml.plugins.saveas;
 
 import android.app.Activity;
+import android.content.ContentResolver;
+import android.content.ContentValues;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.net.Uri;
+import android.os.Build;
+import android.os.Environment;
+import android.provider.MediaStore;
 import android.util.Base64;
 import androidx.activity.result.ActivityResult;
 import com.getcapacitor.JSObject;
@@ -66,6 +71,69 @@ public class SaveAsPlugin extends Plugin {
             startActivityForResult(call, intent, "onSavePicked");
         } catch (Throwable e) {
             call.reject("cannot open save picker: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Writes the file straight into the public Downloads folder via
+     * MediaStore (Android 10+). No picker, no leaving the app, no activity
+     * result — so the OEM process-kill problem of the SAF flow cannot lose
+     * the file. This is the preferred save path; saveAs() stays as the
+     * fallback for older systems / when this rejects.
+     */
+    @PluginMethod
+    public void saveToDownloads(PluginCall call) {
+        String data = call.getString("data");
+        String filename = call.getString("filename", "config.yaml");
+        String contentType = call.getString("contentType", "text/plain");
+        if (data == null) {
+            call.reject("missing data");
+            return;
+        }
+        if (Build.VERSION.SDK_INT < 29) {
+            call.reject("needs Android 10+");
+            return;
+        }
+        byte[] bytes;
+        try {
+            bytes = Base64.decode(data, Base64.DEFAULT);
+        } catch (Throwable e) {
+            call.reject("invalid base64 data");
+            return;
+        }
+        Uri uri = null;
+        try {
+            ContentResolver resolver = getContext().getContentResolver();
+            ContentValues values = new ContentValues();
+            values.put(MediaStore.Downloads.DISPLAY_NAME, filename);
+            values.put(MediaStore.Downloads.MIME_TYPE, contentType);
+            values.put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS);
+            values.put(MediaStore.Downloads.IS_PENDING, 1);
+            uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values);
+            if (uri == null) {
+                call.reject("cannot create download entry");
+                return;
+            }
+            OutputStream out = resolver.openOutputStream(uri);
+            if (out == null) {
+                resolver.delete(uri, null, null);
+                call.reject("cannot open output stream");
+                return;
+            }
+            out.write(bytes);
+            out.flush();
+            out.close();
+            ContentValues done = new ContentValues();
+            done.put(MediaStore.Downloads.IS_PENDING, 0);
+            resolver.update(uri, done, null, null);
+            JSObject ret = new JSObject();
+            ret.put("uri", uri.toString());
+            call.resolve(ret);
+        } catch (Throwable e) {
+            if (uri != null) {
+                try { getContext().getContentResolver().delete(uri, null, null); } catch (Throwable ignored) {}
+            }
+            call.reject("write failed: " + e.getMessage());
         }
     }
 
