@@ -69,3 +69,6 @@ a.btn-link.primary { background: #2563eb; color: #fff; border-color: #2563eb; }
 .node-check { width: 20px; height: 20px; accent-color: #2563eb; flex: none; margin-right: 2px; }
 #back-top { position: fixed; right: 16px; bottom: 88px; z-index: 40; width: 44px; height: 44px; border-radius: 50%; border: none; background: #2563eb; color: #fff; font-size: 20px; line-height: 1; box-shadow: 0 4px 14px rgba(0,0,0,.25); cursor: pointer; }
 #back-top[hidden] { display: none; }
+
+.cand-main { display: flex; align-items: center; gap: 8px; flex: 1; cursor: pointer; min-width: 0; }
+.cand-row input.cand-loc { width: 64px; flex: none; }

@@ -721,7 +721,7 @@
       if (!subCandidates.length) { box.innerHTML = ''; return; }
       var rows = subCandidates.map(function (c, i) {
         var nm = Core.buildNodeName({ groupName: c.groupName || Core.ALL_GROUP, location: c.location || t('未知'), server: c.server, port: c.port });
-        return '<label class="cand-row"><input type="checkbox" data-ci="' + i + '" checked><span class="cand-name">' + esc(nm) + '</span><span class="rule-badge">' + esc(c.type) + '</span>' + (c.detectNote ? '<span class="hint">' + esc(c.detectNote) + '</span>' : '') + '</label>';
+        return '<div class="cand-row"><label class="cand-main"><input type="checkbox" data-ci="' + i + '" checked><span class="cand-name">' + esc(nm) + '</span></label><input class="cand-loc" data-ci="' + i + '" value="' + esc(c.location || '') + '" placeholder="地点"><span class="rule-badge">' + esc(c.type) + '</span>' + (c.detectNote ? '<span class="hint">' + esc(c.detectNote) + '</span>' : '') + '</div>';
       }).join('');
       box.innerHTML = '<div class="card"><div class="card-head"><strong>' + esc(t('解析结果')) + '</strong><span id="cand-count"></span></div>' +
         '<div class="row"><button id="cand-all-btn">全选</button><button id="cand-none-btn">全不选</button><button id="cand-add-btn" class="primary">添加选中节点</button><button id="cand-detect-btn">一键检测国家</button></div>' +
@@ -736,6 +736,16 @@
     }
     $('sub-candidates').addEventListener('change', function (e) {
       if (e.target.matches('input[type="checkbox"][data-ci]')) updateCandCount();
+    });
+    // 候选行里直接改地点（CDN 前置等自动定不了的，自己知道出口就改这里），名字实时跟着变
+    $('sub-candidates').addEventListener('input', function (e) {
+      if (!e.target.matches('.cand-loc')) return;
+      var c = subCandidates[Number(e.target.dataset.ci)];
+      if (!c) return;
+      c.location = e.target.value.trim();
+      var row = e.target.closest('.cand-row');
+      var nmEl = row && row.querySelector('.cand-name');
+      if (nmEl) nmEl.textContent = Core.buildNodeName({ groupName: c.groupName || Core.ALL_GROUP, location: c.location || t('未知'), server: c.server, port: c.port });
     });
     $('sub-candidates').addEventListener('click', function (e) {
       var btn = e.target.closest('button'); if (!btn) return;
@@ -888,7 +898,7 @@
   }
 
   // ---------------------------------------------------------------- 更新检测
-  var APP_VERSION = '1.0.19';
+  var APP_VERSION = '1.0.20';
   var LATEST_API = 'https://api.github.com/repos/Vardven/node-yml-config-tool/releases/latest';
   var updateReleaseUrl = 'https://github.com/Vardven/node-yml-config-tool/releases/latest';
   var latestRelease = null;
