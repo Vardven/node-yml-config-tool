@@ -586,19 +586,29 @@
     return [node.type, String(node.server || '').toLowerCase(), node.port || '', cred, d.network || ''].join('|');
   }
   function addNode(state, node) {
-    node.name = buildNodeName(node);
     var idkey = nodeIdentity(node);
     var isDup = state.nodes.some(function (n) { return n.groupName === node.groupName && nodeIdentity(n) === idkey; });
     if (isDup) {
+      node.name = buildNodeName(node);
       return { ok: false, dup: true, error: ct('节点重复：{0} 已在该分组中', node.name) };
     }
-    if (state.nodes.some(function (n) { return buildNodeName(n) === node.name; })) {
-      return { ok: false, error: ct('节点名重复：{0}（同分组同地址同端口时，请加第 5 段后缀区分）', node.name) };
+    // 名字撞了但不是同一个节点（同分组同地址同端口、协议或账号不同）：
+    // 自动在第 5 段补协议名区分，补完还撞就再补序号，直接导入、不跳过
+    var taken = function () { return state.nodes.some(function (n) { return buildNodeName(n) === buildNodeName(node); }); };
+    var suffixed = false;
+    if (taken()) {
+      if (!node.suffix) node.suffix = node.type;
+      if (taken()) {
+        var base = node.suffix, k = 2;
+        do { node.suffix = base + k; k++; } while (taken());
+      }
+      suffixed = true;
     }
+    node.name = buildNodeName(node);
     node.id = node.id || uid();
     state.nodes.push(node);
     if (node.groupName !== ALL_GROUP && state.groups.indexOf(node.groupName) === -1) state.groups.push(node.groupName);
-    return { ok: true, node: node };
+    return { ok: true, node: node, suffixed: suffixed };
   }
 
   // ---------------------------------------------------------------------------

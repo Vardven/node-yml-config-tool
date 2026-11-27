@@ -377,14 +377,15 @@
   }
   // 把候选节点批量写入（批量粘贴链接 / 导入订阅内容共用）
   function importCandidates(cands, parseErrs, out) {
-    var added = 0, dupCount = 0, skipped = (parseErrs || []).slice();
+    var added = 0, dupCount = 0, suffixCount = 0, skipped = (parseErrs || []).slice();
     cands.forEach(function (c) {
       var res = Core.addNode(state, { groupName: c.groupName || Core.ALL_GROUP, location: c.location || t('未知'), type: c.type, server: c.server, port: c.port, details: c.details });
-      if (res.ok) added++; else if (res.dup) dupCount++; else skipped.push(res.error);
+      if (res.ok) { added++; if (res.suffixed) suffixCount++; } else if (res.dup) dupCount++; else skipped.push(res.error);
     });
     save(); renderAll();
     var m = t('导入完成：成功 {0} 条', added);
     if (dupCount) m += t('，{0} 个节点重复没有导入', dupCount);
+    if (suffixCount) m += t('，{0} 个同名节点已自动添加协议后缀', suffixCount);
     if (skipped.length) m += t('，跳过 {0} 条（{1}）', skipped.length, skipped[0]);
     msg(out, m, added > 0);
   }
@@ -898,7 +899,7 @@
   }
 
   // ---------------------------------------------------------------- 更新检测
-  var APP_VERSION = '1.0.21';
+  var APP_VERSION = '1.0.22';
   var LATEST_API = 'https://api.github.com/repos/Vardven/node-yml-config-tool/releases/latest';
   var updateReleaseUrl = 'https://github.com/Vardven/node-yml-config-tool/releases/latest';
   var latestRelease = null;
