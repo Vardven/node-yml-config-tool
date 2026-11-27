@@ -87,28 +87,6 @@ jobs:
           GRADLE
 
 
-      - name: Add mihomo core binaries (jniLibs) and legacy packaging
-        run: |
-          VER=v1.19.34
-          BASE="https://github.com/MetaCubeX/mihomo/releases/download/$VER"
-          mkdir -p android/app/src/main/jniLibs/arm64-v8a android/app/src/main/jniLibs/armeabi-v7a android/app/src/main/jniLibs/x86_64
-          curl -sfL "$BASE/mihomo-android-arm64-v8-$VER.gz" | gunzip > android/app/src/main/jniLibs/arm64-v8a/libmihomo.so
-          curl -sfL "$BASE/mihomo-android-armv7-$VER.gz" | gunzip > android/app/src/main/jniLibs/armeabi-v7a/libmihomo.so
-          curl -sfL "$BASE/mihomo-android-amd64-$VER.gz" | gunzip > android/app/src/main/jniLibs/x86_64/libmihomo.so
-          ls -l android/app/src/main/jniLibs/*/libmihomo.so
-          cat >> android/app/build.gradle <<'GRADLE'
-
-          // --- mihomo core injected by CI: extract the .so so the app can execute it ---
-          android {
-              packagingOptions {
-                  jniLibs {
-                      useLegacyPackaging = true
-                  }
-              }
-          }
-          GRADLE
-
-
       - name: Build debug APK and unsigned release APK
         working-directory: android
         run: |
